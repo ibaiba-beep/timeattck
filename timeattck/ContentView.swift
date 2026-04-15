@@ -1,21 +1,23 @@
-//
-//  ContentView.swift
-//  timeattck
-//
-//  Created by 곽승민 on 3/22/26.
-//
-
 import SwiftUI
 
 struct ContentView: View {
     var body: some View {
-        VStack {
-            Image(systemName: "globe")
-                .imageScale(.large)
-                .foregroundStyle(.tint)
-            Text("Hello, world!")
+        TabView {
+            TimerView()
+                .tabItem {
+                    Label("타이머", systemImage: "timer")
+                }
+            
+            ProjectView()
+                .tabItem {
+                    Label("프로젝트", systemImage: "folder")
+                }
+            
+            ReportView()
+                .tabItem {
+                    Label("리포트", systemImage: "chart.bar")
+                }
         }
-        .padding()
     }
 }
 
