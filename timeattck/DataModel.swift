@@ -2,32 +2,26 @@ import SwiftUI
 import Combine
 import UserNotifications
 
-enum ProjectCategory: String, Codable, CaseIterable {
-    case game = "게임"
-    case study = "공부"
-    case sns = "SNS"
-    case entertainment = "엔터테인먼트"
-    case health = "건강/운동"
-    case work = "업무"
-    case other = "기타"
+struct ProjectCategory: Identifiable, Codable, Hashable {
+    var id = UUID()
+    var name: String
+    var icon: String
 
-    var icon: String {
-        switch self {
-        case .game: return "🎮"
-        case .study: return "📚"
-        case .sns: return "💬"
-        case .entertainment: return "🎬"
-        case .health: return "💪"
-        case .work: return "💼"
-        case .other: return "📌"
-        }
-    }
+    static let defaults: [ProjectCategory] = [
+        ProjectCategory(name: "게임",       icon: "🎮"),
+        ProjectCategory(name: "공부",       icon: "📚"),
+        ProjectCategory(name: "SNS",        icon: "💬"),
+        ProjectCategory(name: "엔터테인먼트", icon: "🎬"),
+        ProjectCategory(name: "건강/운동",   icon: "💪"),
+        ProjectCategory(name: "업무",       icon: "💼"),
+        ProjectCategory(name: "기타",       icon: "📌"),
+    ]
 }
 
 struct Project: Identifiable, Codable, Hashable {
     var id = UUID()
     var name: String
-    var category: ProjectCategory = .other
+    var categoryId: UUID
     var dailyGoal: TimeInterval = 0
 }
 
@@ -39,90 +33,48 @@ struct TimeRecord: Identifiable, Codable {
 }
 
 class DataModel: ObservableObject {
+    @Published var categories: [ProjectCategory] = []
     @Published var projects: [Project] = []
     @Published var records: [TimeRecord] = []
 
     init() {
+        loadCategories()
         loadProjects()
         loadRecords()
         requestNotificationPermission()
+        if categories.isEmpty {
+            categories = ProjectCategory.defaults
+            saveCategories()
+        }
+        removeSampleDataIfNeeded()
+    }
 
-        if projects.isEmpty {
-            loadSampleData()
+    // MARK: - 카테고리 CRUD
+    func addCategory(name: String, icon: String) {
+        let category = ProjectCategory(name: name, icon: icon)
+        categories.append(category)
+        saveCategories()
+    }
+
+    func updateCategory(_ category: ProjectCategory) {
+        if let index = categories.firstIndex(where: { $0.id == category.id }) {
+            categories[index] = category
+            saveCategories()
         }
     }
 
-    func loadSampleData() {
-        // 앱별 (이름, 카테고리, 하루목표, 하루평균사용시간범위(초))
-        let sampleApps: [(String, ProjectCategory, TimeInterval, ClosedRange<Int>)] = [
-            ("카카오톡",    .sns,           3600,  1800...5400),
-            ("인스타그램",  .sns,           1800,  900...3600),
-            ("유튜브",      .entertainment, 7200,  3600...9000),
-            ("넷플릭스",    .entertainment, 5400,  1800...7200),
-            ("듀오링고",    .study,         3600,  600...3000),
-            ("리디북스",    .study,         2700,  900...4500),
-            ("배틀그라운드",.game,          7200,  1800...10800),
-            ("쿠키런",      .game,          1800,  600...3600),
-            ("삼성헬스",    .health,        3600,  1200...5400),
-            ("슬랙",        .work,          5400,  2700...7200),
-            ("노션",        .work,          3600,  1800...5400),
-            ("트위터",      .sns,           1800,  600...2700),
-        ]
-
-        var createdProjects: [Project] = []
-        for (name, category, goal, _) in sampleApps {
-            let project = Project(name: name, category: category, dailyGoal: goal)
-            createdProjects.append(project)
-        }
-        projects = createdProjects
-        saveProjects()
-
-        var sampleRecords: [TimeRecord] = []
-        let calendar = Calendar.current
-        let today = Date()
-
-        for (index, project) in projects.enumerated() {
-            let range = sampleApps[index].3
-            // 30일치 데이터 생성
-            for daysAgo in 0..<30 {
-                guard let date = calendar.date(byAdding: .day, value: -daysAgo, to: today) else { continue }
-
-                // 주말엔 SNS/게임/엔터 사용량 증가, 평일엔 업무/공부 증가
-                let weekday = calendar.component(.weekday, from: date)
-                let isWeekend = weekday == 1 || weekday == 7
-
-                var duration: TimeInterval
-                switch project.category {
-                case .sns, .game, .entertainment:
-                    duration = TimeInterval(Int.random(in: isWeekend ? range.upperBound/2...range.upperBound : range))
-                case .work, .study:
-                    duration = TimeInterval(Int.random(in: isWeekend ? range.lowerBound...range.lowerBound*2 : range))
-                default:
-                    duration = TimeInterval(Int.random(in: range))
-                }
-
-                // 하루에 1~3개 기록으로 분산
-                let sessionCount = Int.random(in: 1...3)
-                for session in 0..<sessionCount {
-                    let sessionDuration = duration / TimeInterval(sessionCount)
-                    let hourOffset = session * 4
-                    let sessionDate = calendar.date(byAdding: .hour, value: hourOffset, to: date) ?? date
-                    let record = TimeRecord(projectId: project.id, duration: sessionDuration, date: sessionDate)
-                    sampleRecords.append(record)
-                }
-            }
-        }
-
-        records = sampleRecords
-        saveRecords()
+    func deleteCategory(_ category: ProjectCategory) {
+        categories.removeAll { $0.id == category.id }
+        saveCategories()
     }
 
-    func requestNotificationPermission() {
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
+    func category(for project: Project) -> ProjectCategory? {
+        categories.first { $0.id == project.categoryId }
     }
 
-    func addProject(name: String, category: ProjectCategory, dailyGoal: TimeInterval = 0) {
-        let project = Project(name: name, category: category, dailyGoal: dailyGoal)
+    // MARK: - 프로젝트 CRUD
+    func addProject(name: String, categoryId: UUID, dailyGoal: TimeInterval = 0) {
+        let project = Project(name: name, categoryId: categoryId, dailyGoal: dailyGoal)
         projects.append(project)
         saveProjects()
     }
@@ -139,6 +91,7 @@ class DataModel: ObservableObject {
         saveProjects()
     }
 
+    // MARK: - 기록 CRUD
     func addRecord(projectId: UUID, duration: TimeInterval) {
         let record = TimeRecord(projectId: projectId, duration: duration)
         records.append(record)
@@ -151,6 +104,7 @@ class DataModel: ObservableObject {
         saveRecords()
     }
 
+    // MARK: - 시간 계산
     func records(for project: Project) -> [TimeRecord] {
         records.filter { $0.projectId == project.id }
     }
@@ -169,23 +123,18 @@ class DataModel: ObservableObject {
     }
 
     func totalTime(for category: ProjectCategory) -> TimeInterval {
-        let categoryProjects = projects.filter { $0.category == category }
-        return categoryProjects.reduce(0) { $0 + totalTime(for: $1) }
+        projects.filter { $0.categoryId == category.id }.reduce(0) { $0 + totalTime(for: $1) }
     }
 
-    // 최근 7일 일별 총 사용시간
     func dailyTotals(days: Int = 7) -> [(String, Double)] {
         let calendar = Calendar.current
         let today = Date()
         var result: [(String, Double)] = []
-
         for daysAgo in (0..<days).reversed() {
             guard let date = calendar.date(byAdding: .day, value: -daysAgo, to: today) else { continue }
             let start = calendar.startOfDay(for: date)
             let end = calendar.date(byAdding: .day, value: 1, to: start)!
-            let dayRecords = records.filter { $0.date >= start && $0.date < end }
-            let total = dayRecords.reduce(0.0) { $0 + $1.duration } / 3600.0
-
+            let total = records.filter { $0.date >= start && $0.date < end }.reduce(0.0) { $0 + $1.duration } / 3600.0
             let formatter = DateFormatter()
             formatter.dateFormat = "M/d"
             result.append((formatter.string(from: date), total))
@@ -193,11 +142,69 @@ class DataModel: ObservableObject {
         return result
     }
 
+    // MARK: - 습관 트래커
+    func streak(for project: Project) -> Int {
+        guard project.dailyGoal > 0 else { return 0 }
+        let calendar = Calendar.current
+        var streak = 0
+        var checkDate = calendar.startOfDay(for: Date())
+        for _ in 0..<365 {
+            let end = calendar.date(byAdding: .day, value: 1, to: checkDate)!
+            let dayTotal = records(for: project).filter { $0.date >= checkDate && $0.date < end }.reduce(0.0) { $0 + $1.duration }
+            if dayTotal >= project.dailyGoal {
+                streak += 1
+                checkDate = calendar.date(byAdding: .day, value: -1, to: checkDate)!
+            } else { break }
+        }
+        return streak
+    }
+
+    func isTodayGoalAchieved(for project: Project) -> Bool {
+        guard project.dailyGoal > 0 else { return false }
+        return todayTime(for: project) >= project.dailyGoal
+    }
+
+    func achievedDays(for project: Project, days: Int = 30) -> Int {
+        guard project.dailyGoal > 0 else { return 0 }
+        let calendar = Calendar.current
+        let today = Date()
+        var count = 0
+        for daysAgo in 0..<days {
+            guard let date = calendar.date(byAdding: .day, value: -daysAgo, to: today) else { continue }
+            let start = calendar.startOfDay(for: date)
+            let end = calendar.date(byAdding: .day, value: 1, to: start)!
+            let dayTotal = records(for: project).filter { $0.date >= start && $0.date < end }.reduce(0.0) { $0 + $1.duration }
+            if dayTotal >= project.dailyGoal { count += 1 }
+        }
+        return count
+    }
+
+    func badge(for project: Project) -> String {
+        let streak = streak(for: project)
+        let achieved = achievedDays(for: project, days: 30)
+        if streak >= 30 { return "👑" }
+        if streak >= 14 { return "💎" }
+        if streak >= 7  { return "🥇" }
+        if streak >= 3  { return "🥈" }
+        if achieved >= 1 { return "🥉" }
+        return ""
+    }
+
+    func todayGoalSummary() -> (achieved: Int, total: Int) {
+        let withGoal = projects.filter { $0.dailyGoal > 0 }
+        let achieved = withGoal.filter { isTodayGoalAchieved(for: $0) }.count
+        return (achieved, withGoal.count)
+    }
+
+    // MARK: - 알림
+    func requestNotificationPermission() {
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
+    }
+
     func checkGoal(projectId: UUID) {
         guard let project = projects.first(where: { $0.id == projectId }),
               project.dailyGoal > 0 else { return }
-        let todayTime = todayTime(for: project)
-        if todayTime >= project.dailyGoal {
+        if todayTime(for: project) >= project.dailyGoal {
             sendNotification(project: project)
         }
     }
@@ -207,12 +214,89 @@ class DataModel: ObservableObject {
         content.title = "목표 달성! 🎉"
         content.body = "\(project.name) 오늘 목표 시간을 달성했어요!"
         content.sound = .default
-        let request = UNNotificationRequest(
-            identifier: UUID().uuidString,
-            content: content,
-            trigger: nil
-        )
+        let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
         UNUserNotificationCenter.current().add(request)
+    }
+
+    // MARK: - 샘플 데이터
+    func loadSampleData() {
+        let sampleApps: [(String, String, TimeInterval, ClosedRange<Int>)] = [
+            ("카카오톡",    "SNS",        3600,  1800...5400),
+            ("인스타그램",  "SNS",        1800,  900...3600),
+            ("유튜브",      "엔터테인먼트", 7200, 3600...9000),
+            ("넷플릭스",    "엔터테인먼트", 5400, 1800...7200),
+            ("듀오링고",    "공부",        3600,  600...3000),
+            ("리디북스",    "공부",        2700,  900...4500),
+            ("배틀그라운드","게임",        7200,  1800...10800),
+            ("쿠키런",      "게임",        1800,  600...3600),
+            ("삼성헬스",    "건강/운동",   3600,  1200...5400),
+            ("슬랙",        "업무",        5400,  2700...7200),
+        ]
+
+        var createdProjects: [Project] = []
+        for (name, categoryName, goal, _) in sampleApps {
+            if let cat = categories.first(where: { $0.name == categoryName }) {
+                let project = Project(name: name, categoryId: cat.id, dailyGoal: goal)
+                createdProjects.append(project)
+            }
+        }
+        projects = createdProjects
+        saveProjects()
+
+        var sampleRecords: [TimeRecord] = []
+        let calendar = Calendar.current
+        let today = Date()
+
+        for (index, project) in projects.enumerated() {
+            let range = sampleApps[index].3
+            for daysAgo in 0..<30 {
+                guard let date = calendar.date(byAdding: .day, value: -daysAgo, to: today) else { continue }
+                let weekday = calendar.component(.weekday, from: date)
+                let isWeekend = weekday == 1 || weekday == 7
+                let duration = TimeInterval(Int.random(in: isWeekend ? range.upperBound/2...range.upperBound : range))
+                let sessionCount = Int.random(in: 1...3)
+                for session in 0..<sessionCount {
+                    let sessionDuration = duration / TimeInterval(sessionCount)
+                    let hourOffset = session * 4
+                    let sessionDate = calendar.date(byAdding: .hour, value: hourOffset, to: date) ?? date
+                    sampleRecords.append(TimeRecord(projectId: project.id, duration: sessionDuration, date: sessionDate))
+                }
+            }
+        }
+        records = sampleRecords
+        saveRecords()
+    }
+    // MARK: - 샘플 데이터 제거 (1회용)
+    func removeSampleDataIfNeeded() {
+        guard !UserDefaults.standard.bool(forKey: "sampleDataRemoved") else { return }
+        
+        let sampleNames: Set<String> = [
+            "카카오톡", "인스타그램", "유튜브", "넷플릭스",
+            "듀오링고", "리디북스", "배틀그라운드", "쿠키런",
+            "삼성헬스", "슬랙"
+        ]
+        
+        let sampleProjectIds = projects.filter { sampleNames.contains($0.name) }.map { $0.id }
+        projects.removeAll { sampleNames.contains($0.name) }
+        saveProjects()
+        
+        records.removeAll { sampleProjectIds.contains($0.projectId) }
+        saveRecords()
+        
+        UserDefaults.standard.set(true, forKey: "sampleDataRemoved")
+    }
+    // MARK: - 저장
+    private func saveCategories() {
+        if let data = try? JSONEncoder().encode(categories) {
+            UserDefaults.standard.set(data, forKey: "categories")
+        }
+    }
+
+    private func loadCategories() {
+        if let data = UserDefaults.standard.data(forKey: "categories"),
+           let decoded = try? JSONDecoder().decode([ProjectCategory].self, from: data) {
+            categories = decoded
+        }
     }
 
     private func saveProjects() {
