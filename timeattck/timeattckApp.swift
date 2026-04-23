@@ -1,13 +1,20 @@
 import SwiftUI
+import SwiftData
+import FirebaseCore
 
 @main
 struct timeattckApp: App {
-    @StateObject private var dataModel = DataModel()
-
+    init() {
+        FirebaseApp.configure()
+    }
     var body: some Scene {
         WindowGroup {
             ContentView()
-                .environmentObject(dataModel)
+                .onAppear {
+                    requestNotificationPermission()
+                    migrateFromUserDefaults(context: sharedModelContainer.mainContext)
+                }
         }
+        .modelContainer(sharedModelContainer)
     }
 }

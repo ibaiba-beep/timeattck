@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 
 struct ContentView: View {
     var body: some View {
@@ -23,11 +24,15 @@ struct ContentView: View {
                 .tabItem {
                     Label("설정", systemImage: "gearshape")
                 }
+            SocialView()
+                .tabItem {
+                    Label("소셜", systemImage: "person.2")
+                }
         }
     }
 }
 
 #Preview {
     ContentView()
-        .environmentObject(DataModel())
+        .modelContainer(sharedModelContainer)
 }

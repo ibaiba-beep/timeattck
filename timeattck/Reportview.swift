@@ -1,13 +1,17 @@
 import SwiftUI
+import SwiftData
 import Charts
 
 struct ReportView: View {
-    @EnvironmentObject var dataModel: DataModel
+    @Query(sort: \Project.sortOrder) var projects: [Project]
+    @Query var allRecords: [TimeRecord]
+    @Environment(\.modelContext) var modelContext
     @State private var selectedPeriod: Int = 0
     @State private var recordToDelete: TimeRecord? = nil
     @State private var showingDeleteAlert = false
     @State private var selectedDate: String? = nil
     @State private var showingDayDetail = false
+    @State private var weekOffset: Int = 0
 
     var body: some View {
         NavigationView {
@@ -37,10 +41,37 @@ struct ReportView: View {
     }
 
     var weeklyView: some View {
-        let data = periodProjectData(days: 7)
+        let data = weeklyProjectData()
         let total = data.reduce(0.0) { $0 + $1.1 }
+        let range = weekRange(offset: weekOffset)
         return VStack(spacing: 20) {
-            summaryCard(title: "이번 주 총 사용시간", hours: total)
+            summaryCard(
+                title: weekOffset == 0 ? "이번 주 총 사용시간" : "\(weekRangeLabel(range)) 사용시간",
+                hours: total
+            )
+
+            // Week navigator
+            HStack {
+                Button(action: { withAnimation { weekOffset -= 1 } }) {
+                    Image(systemName: "chevron.left.circle.fill")
+                        .font(.title3).foregroundColor(.blue)
+                }
+                Spacer()
+                VStack(spacing: 2) {
+                    Text(weekOffset == 0 ? "이번 주" : "\(-weekOffset)주 전")
+                        .font(.subheadline).fontWeight(.medium)
+                    Text(weekRangeLabel(range)).font(.caption).foregroundColor(.gray)
+                }
+                Spacer()
+                Button(action: { withAnimation { weekOffset += 1 } }) {
+                    Image(systemName: "chevron.right.circle.fill")
+                        .font(.title3)
+                        .foregroundColor(weekOffset >= 0 ? Color.gray.opacity(0.35) : .blue)
+                }
+                .disabled(weekOffset >= 0)
+            }
+            .padding(.horizontal, 20)
+
             if !data.isEmpty {
                 VStack(alignment: .leading, spacing: 12) {
                     Text("프로젝트 비중").font(.headline).padding(.horizontal)
@@ -48,33 +79,45 @@ struct ReportView: View {
                         .frame(width: 260, height: 260).frame(maxWidth: .infinity)
                     legendView(data: data, total: total)
                 }
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("일별 사용시간").font(.headline).padding(.horizontal)
-                    Text("날짜를 탭하면 상세 내역을 볼 수 있어요")
-                        .font(.caption).foregroundColor(.gray).padding(.horizontal)
-                    let dailyData = dataModel.dailyTotals(days: 7)
-                    Chart {
-                        ForEach(dailyData, id: \.0) { item in
-                            BarMark(x: .value("날짜", item.0), y: .value("시간", item.1))
-                                .foregroundStyle(selectedDate == item.0 ? Color.orange.gradient : Color.blue.gradient)
-                                .cornerRadius(4)
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("일별 사용시간").font(.headline).padding(.horizontal)
+                Text("좌우로 밀어 이번 달 전체 보기 · 탭하면 상세")
+                    .font(.caption2).foregroundColor(.gray).padding(.horizontal)
+                let dailyData = monthDailyTotals()
+                ScrollViewReader { scrollProxy in
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        Chart {
+                            ForEach(dailyData, id: \.0) { item in
+                                BarMark(x: .value("날짜", item.0), y: .value("시간", item.1))
+                                    .foregroundStyle(selectedDate == item.0 ? Color.orange.gradient : Color.blue.gradient)
+                                    .cornerRadius(4)
+                            }
                         }
-                    }
-                    .chartOverlay { proxy in
-                        GeometryReader { geo in
-                            Rectangle().fill(Color.clear).contentShape(Rectangle())
-                                .onTapGesture { location in
-                                    let x = location.x - geo[proxy.plotFrame!].origin.x
-                                    if let date: String = proxy.value(atX: x) {
-                                        selectedDate = date
-                                        showingDayDetail = true
+                        .chartOverlay { proxy in
+                            GeometryReader { geo in
+                                Rectangle().fill(Color.clear).contentShape(Rectangle())
+                                    .onTapGesture { location in
+                                        let x = location.x - geo[proxy.plotFrame!].origin.x
+                                        if let date: String = proxy.value(atX: x) {
+                                            selectedDate = date
+                                            showingDayDetail = true
+                                        }
                                     }
-                                }
+                            }
                         }
+                        .frame(width: CGFloat(dailyData.count) * 44, height: 180)
+                        .id("dailyChart")
                     }
-                    .frame(height: 180).padding(.horizontal)
+                    .onAppear {
+                        scrollProxy.scrollTo("dailyChart", anchor: .trailing)
+                    }
                 }
-            } else { emptyView }
+                .padding(.horizontal)
+            }
+
+            if data.isEmpty { emptyView }
         }
     }
 
@@ -106,8 +149,7 @@ struct ReportView: View {
                         HStack(spacing: 12) {
                             Text("\(index + 1)").font(.caption).fontWeight(.bold).foregroundColor(.white)
                                 .frame(width: 24, height: 24).background(medalColor(index)).clipShape(Circle())
-                            let project = dataModel.project(for: item.0)
-                            Text("\(project?.icon ?? "📌") \(item.0.name)").font(.body).lineLimit(1)
+                            Text("\(item.0.project?.icon ?? "📌") \(item.0.name)").font(.body).lineLimit(1)
                             Spacer()
                             Text(timeString(from: item.1 * 3600)).font(.body).fontWeight(.medium).foregroundColor(.purple)
                         }
@@ -120,8 +162,8 @@ struct ReportView: View {
 
     var recordListView: some View {
         VStack(spacing: 16) {
-            ForEach(dataModel.projects) { project in
-                let projectActivities = dataModel.activities(for: project)
+            ForEach(projects) { project in
+                let projectActivities = project.sortedActivities
                 if !projectActivities.isEmpty {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("\(project.icon) \(project.name)").font(.headline).padding(.horizontal)
@@ -130,10 +172,10 @@ struct ReportView: View {
                                 HStack {
                                     Text(activity.name).font(.subheadline).fontWeight(.medium)
                                     Spacer()
-                                    Text("총 " + timeString(from: dataModel.totalTime(for: activity)))
+                                    Text("총 " + timeString(from: activity.totalTime))
                                         .font(.caption).foregroundColor(.blue).fontWeight(.medium)
                                 }.padding(.horizontal)
-                                let records = dataModel.records(for: activity).sorted { $0.date > $1.date }.prefix(5)
+                                let records = activity.records.sorted { $0.date > $1.date }.prefix(5)
                                 if records.isEmpty {
                                     Text("기록 없음").foregroundColor(.gray).font(.caption).padding(.horizontal)
                                 } else {
@@ -157,7 +199,7 @@ struct ReportView: View {
         }
         .alert("기록 삭제", isPresented: $showingDeleteAlert) {
             Button("삭제", role: .destructive) {
-                if let record = recordToDelete { dataModel.deleteRecord(record) }
+                if let record = recordToDelete { modelContext.delete(record) }
             }
             Button("취소", role: .cancel) {}
         } message: { Text("이 기록을 삭제할까요?") }
@@ -193,13 +235,61 @@ struct ReportView: View {
         Text("아직 기록이 없어요").foregroundColor(.gray).frame(maxWidth: .infinity).padding()
     }
 
+    // MARK: - Week helpers
+
+    // Returns Monday 00:00 ~ next Monday 00:00 (exclusive end) for the given offset
+    func weekRange(offset: Int) -> (start: Date, end: Date) {
+        let calendar = Calendar.current
+        let today = Date()
+        let weekday = calendar.component(.weekday, from: today)  // 1=Sun, 2=Mon ... 7=Sat
+        let daysFromMonday = weekday == 1 ? 6 : weekday - 2
+        let thisMonday = calendar.date(byAdding: .day, value: -daysFromMonday, to: calendar.startOfDay(for: today))!
+        let monday = calendar.date(byAdding: .weekOfYear, value: offset, to: thisMonday)!
+        return (monday, calendar.date(byAdding: .day, value: 7, to: monday)!)
+    }
+
+    func weekRangeLabel(_ range: (start: Date, end: Date)) -> String {
+        let f = DateFormatter(); f.dateFormat = "M/d"
+        let sunday = Calendar.current.date(byAdding: .day, value: -1, to: range.end)!
+        return "\(f.string(from: range.start)) ~ \(f.string(from: sunday))"
+    }
+
+    func weeklyProjectData() -> [(String, Double, Color)] {
+        let range = weekRange(offset: weekOffset)
+        let colors: [Color] = [.blue, .purple, .pink, .orange, .green, .teal, .red, .cyan, .mint, .indigo]
+        return projects.enumerated().compactMap { index, project in
+            let total = project.activities.reduce(0.0) { sum, activity in
+                sum + activity.records.filter { $0.date >= range.start && $0.date < range.end }.reduce(0.0) { $0 + $1.duration }
+            } / 3600.0
+            if total > 0 { return ("\(project.icon) \(project.name)", total, colors[index % colors.count]) }
+            return nil
+        }.sorted { $0.1 > $1.1 }
+    }
+
+    func monthDailyTotals() -> [(String, Double)] {
+        let calendar = Calendar.current
+        let today = Date()
+        let startOfMonth = calendar.date(from: calendar.dateComponents([.year, .month], from: today))!
+        let f = DateFormatter(); f.dateFormat = "M/d"
+        var results: [(String, Double)] = []
+        var current = startOfMonth
+        while current <= today {
+            let next = calendar.date(byAdding: .day, value: 1, to: current)!
+            let total = allRecords.filter { $0.date >= current && $0.date < next }.reduce(0.0) { $0 + $1.duration } / 3600.0
+            results.append((f.string(from: current), total))
+            current = next
+        }
+        return results
+    }
+
+    // MARK: - Shared helpers
+
     func periodProjectData(days: Int) -> [(String, Double, Color)] {
         let colors: [Color] = [.blue, .purple, .pink, .orange, .green, .teal, .red, .cyan, .mint, .indigo]
-        let calendar = Calendar.current
-        let start = calendar.date(byAdding: .day, value: -days, to: Date())!
-        return dataModel.projects.enumerated().compactMap { index, project in
-            let total = dataModel.activities(for: project).reduce(0.0) { sum, activity in
-                sum + dataModel.records(for: activity).filter { $0.date >= start }.reduce(0.0) { $0 + $1.duration }
+        let start = Calendar.current.date(byAdding: .day, value: -days, to: Date())!
+        return projects.enumerated().compactMap { index, project in
+            let total = project.activities.reduce(0.0) { sum, activity in
+                sum + activity.records.filter { $0.date >= start }.reduce(0.0) { $0 + $1.duration }
             } / 3600.0
             if total > 0 { return ("\(project.icon) \(project.name)", total, colors[index % colors.count]) }
             return nil
@@ -212,15 +302,15 @@ struct ReportView: View {
         return (0..<4).reversed().compactMap { weekAgo -> (String, Double)? in
             guard let weekStart = calendar.date(byAdding: .weekOfYear, value: -weekAgo, to: today),
                   let weekEnd = calendar.date(byAdding: .day, value: 7, to: weekStart) else { return nil }
-            let total = dataModel.records.filter { $0.date >= weekStart && $0.date < weekEnd }.reduce(0.0) { $0 + $1.duration } / 3600.0
+            let total = allRecords.filter { $0.date >= weekStart && $0.date < weekEnd }.reduce(0.0) { $0 + $1.duration } / 3600.0
             return (weekAgo == 0 ? "이번주" : "\(weekAgo)주전", total)
         }
     }
 
     func topActivities(days: Int) -> [(Activity, Double)] {
         let start = Calendar.current.date(byAdding: .day, value: -days, to: Date())!
-        return dataModel.activities.map { activity in
-            let total = dataModel.records(for: activity).filter { $0.date >= start }.reduce(0.0) { $0 + $1.duration } / 3600.0
+        return projects.flatMap { $0.activities }.map { activity in
+            let total = activity.records.filter { $0.date >= start }.reduce(0.0) { $0 + $1.duration } / 3600.0
             return (activity, total)
         }.filter { $0.1 > 0 }.sorted { $0.1 > $1.1 }.prefix(5).map { $0 }
     }
@@ -248,7 +338,7 @@ struct ReportView: View {
 
 // MARK: - 일별 상세
 struct DayDetailView: View {
-    @EnvironmentObject var dataModel: DataModel
+    @Query(sort: \Project.sortOrder) var projects: [Project]
     @Environment(\.dismiss) var dismiss
     let dateString: String
 
@@ -262,7 +352,6 @@ struct DayDetailView: View {
         var components = Calendar.current.dateComponents([.month, .day], from: parsed)
         components.year = year
         components.hour = 0; components.minute = 0; components.second = 0
-        // 미래 날짜면 작년으로 처리
         if let date = Calendar.current.date(from: components), date > now {
             components.year = year - 1
         }
@@ -274,9 +363,9 @@ struct DayDetailView: View {
         let start = Calendar.current.startOfDay(for: date)
         let end = Calendar.current.date(byAdding: .day, value: 1, to: start)!
         let colors: [Color] = [.blue, .purple, .pink, .orange, .green, .teal, .red]
-        return dataModel.projects.enumerated().compactMap { index, project in
-            let total = dataModel.activities(for: project).reduce(0.0) { sum, activity in
-                sum + dataModel.records(for: activity).filter { $0.date >= start && $0.date < end }.reduce(0.0) { $0 + $1.duration }
+        return projects.enumerated().compactMap { index, project in
+            let total = project.activities.reduce(0.0) { sum, activity in
+                sum + activity.records.filter { $0.date >= start && $0.date < end }.reduce(0.0) { $0 + $1.duration }
             } / 3600.0
             if total > 0 { return ("\(project.icon) \(project.name)", total, colors[index % colors.count]) }
             return nil
@@ -287,8 +376,8 @@ struct DayDetailView: View {
         guard let date = dayDate else { return [] }
         let start = Calendar.current.startOfDay(for: date)
         let end = Calendar.current.date(byAdding: .day, value: 1, to: start)!
-        return dataModel.activities.map { activity in
-            let total = dataModel.records(for: activity).filter { $0.date >= start && $0.date < end }.reduce(0.0) { $0 + $1.duration } / 3600.0
+        return projects.flatMap { $0.activities }.map { activity in
+            let total = activity.records.filter { $0.date >= start && $0.date < end }.reduce(0.0) { $0 + $1.duration } / 3600.0
             return (activity, total)
         }.filter { $0.1 > 0 }.sorted { $0.1 > $1.1 }
     }
@@ -331,9 +420,8 @@ struct DayDetailView: View {
                         VStack(alignment: .leading, spacing: 8) {
                             Text("활동별 사용시간").font(.headline).padding(.horizontal)
                             ForEach(topActivities, id: \.0.id) { item in
-                                let project = dataModel.project(for: item.0)
                                 HStack {
-                                    Text("\(project?.icon ?? "📌") \(item.0.name)").font(.body).lineLimit(1)
+                                    Text("\(item.0.project?.icon ?? "📌") \(item.0.name)").font(.body).lineLimit(1)
                                     Spacer()
                                     GeometryReader { geo in
                                         ZStack(alignment: .leading) {
@@ -426,5 +514,6 @@ struct PieSlice: Shape {
 }
 
 #Preview {
-    ReportView().environmentObject(DataModel())
+    ReportView()
+        .modelContainer(sharedModelContainer)
 }

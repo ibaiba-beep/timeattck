@@ -4,9 +4,13 @@
 .env.production
 .env.*
 
+# Firebase (민감 정보)
+GoogleService-Info.plist
+
 # Xcode
 *.xcuserstate
 xcuserdata/
 DerivedData/
 .DS_Store
 .build/
+build/

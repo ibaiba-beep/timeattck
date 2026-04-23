@@ -1,7 +1,9 @@
 import SwiftUI
+import SwiftData
 
 struct ProjectView: View {
-    @EnvironmentObject var dataModel: DataModel
+    @Environment(\.modelContext) var modelContext
+    @Query(sort: \Project.sortOrder) var projects: [Project]
     @State private var showingAddActivity = false
     @State private var showingProjectManager = false
     @State private var activityToDelete: Activity? = nil
@@ -10,7 +12,10 @@ struct ProjectView: View {
     @State private var isReordering = false
 
     var todaySummary: (achieved: Int, total: Int) {
-        dataModel.todayGoalSummary()
+        let allActivities = projects.flatMap { $0.activities }
+        let goalActivities = allActivities.filter { $0.dailyGoal > 0 }
+        let achieved = goalActivities.filter { $0.isTodayGoalAchieved }.count
+        return (achieved, goalActivities.count)
     }
 
     var body: some View {
@@ -20,8 +25,8 @@ struct ProjectView: View {
                     if todaySummary.total > 0 {
                         todaySummaryCard
                     }
-                    ForEach(dataModel.projects) { project in
-                        let projectActivities = dataModel.activities(for: project)
+                    ForEach(projects) { project in
+                        let projectActivities = project.sortedActivities
                         if !projectActivities.isEmpty {
                             VStack(alignment: .leading, spacing: 8) {
                                 Text("\(project.icon) \(project.name)")
@@ -40,7 +45,7 @@ struct ProjectView: View {
                 }
                 .padding(.top)
             }
-            .navigationTitle("\(dataModel.activities.count)개의 프로젝트 관리중")
+            .navigationTitle("\(projects.reduce(0) { $0 + $1.activities.count })개의 프로젝트 관리중")
             .toolbar {
                 ToolbarItem(placement: .automatic) {
                     Menu {
@@ -70,9 +75,7 @@ struct ProjectView: View {
             .alert("활동 삭제", isPresented: $showingDeleteAlert) {
                 Button("삭제", role: .destructive) {
                     if let activity = activityToDelete {
-                        dataModel.activities.removeAll { $0.id == activity.id }
-                        dataModel.records.removeAll { $0.activityId == activity.id }
-                        dataModel.saveAll()
+                        modelContext.delete(activity)
                     }
                 }
                 Button("취소", role: .cancel) {}
@@ -105,9 +108,9 @@ struct ProjectView: View {
     }
 
     func activityCard(activity: Activity) -> some View {
-        let streak = dataModel.streak(for: activity)
-        let badge = dataModel.badge(for: activity)
-        let isAchieved = dataModel.isTodayGoalAchieved(for: activity)
+        let streak = activity.streak
+        let badge = activity.badge
+        let isAchieved = activity.isTodayGoalAchieved
 
         return HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
@@ -124,7 +127,7 @@ struct ProjectView: View {
                     }
                 }
                 if activity.dailyGoal > 0 {
-                    let todayTime = dataModel.todayTime(for: activity)
+                    let todayTime = activity.todayTime
                     let progress = min(todayTime / activity.dailyGoal, 1.0)
                     HStack(spacing: 6) {
                         ProgressView(value: progress)
@@ -143,11 +146,11 @@ struct ProjectView: View {
             }
             Spacer()
             VStack(alignment: .trailing, spacing: 4) {
-                Text(timeString(from: dataModel.totalTime(for: activity)))
+                Text(timeString(from: activity.totalTime))
                     .font(.caption)
                     .foregroundColor(.gray)
                 if activity.dailyGoal > 0 {
-                    Text("30일 \(dataModel.achievedDays(for: activity))회")
+                    Text("30일 \(activity.achievedDays())회")
                         .font(.caption2)
                         .foregroundColor(.gray)
                 }
@@ -178,16 +181,16 @@ struct ProjectView: View {
 
 // MARK: - 순서 변경 리스트
 struct ReorderableActivityList: View {
-    @EnvironmentObject var dataModel: DataModel
+    @Environment(\.modelContext) var modelContext
     let project: Project
 
-    var projectActivities: [Activity] {
-        dataModel.activities(for: project)
+    var sortedActivities: [Activity] {
+        project.sortedActivities
     }
 
     var body: some View {
         VStack(spacing: 0) {
-            ForEach(projectActivities) { activity in
+            ForEach(sortedActivities) { activity in
                 HStack {
                     Image(systemName: "line.3.horizontal")
                         .foregroundColor(.gray)
@@ -203,19 +206,11 @@ struct ReorderableActivityList: View {
                 .padding(.vertical, 2)
             }
             .onMove { from, to in
-                var allActivities = dataModel.activities
-                let projectIds = projectActivities.map { $0.id }
-                var filtered = allActivities.filter { projectIds.contains($0.id) }
-                filtered.move(fromOffsets: from, toOffset: to)
-                for activity in filtered {
-                    if let idx = allActivities.firstIndex(where: { $0.id == activity.id }) {
-                        allActivities.remove(at: idx)
-                    }
+                var sorted = sortedActivities
+                sorted.move(fromOffsets: from, toOffset: to)
+                for (index, activity) in sorted.enumerated() {
+                    activity.sortOrder = index
                 }
-                let firstIdx = allActivities.firstIndex(where: { $0.projectId == project.id }) ?? allActivities.count
-                allActivities.insert(contentsOf: filtered, at: firstIdx)
-                dataModel.activities = allActivities
-                dataModel.saveAll()
             }
         }
     }
@@ -223,8 +218,9 @@ struct ReorderableActivityList: View {
 
 // MARK: - 프로젝트 관리
 struct ProjectManagerView: View {
-    @EnvironmentObject var dataModel: DataModel
+    @Environment(\.modelContext) var modelContext
     @Environment(\.dismiss) var dismiss
+    @Query(sort: \Project.sortOrder) var projects: [Project]
     @State private var showingAddProject = false
     @State private var projectToEdit: Project? = nil
     @State private var projectToDelete: Project? = nil
@@ -233,13 +229,12 @@ struct ProjectManagerView: View {
     var body: some View {
         NavigationView {
             List {
-                ForEach(dataModel.projects) { project in
+                ForEach(projects) { project in
                     HStack {
                         Text(project.icon).font(.title2)
                         Text(project.name).font(.body)
                         Spacer()
-                        let count = dataModel.activities.filter { $0.projectId == project.id }.count
-                        Text("\(count)개").font(.caption).foregroundColor(.gray)
+                        Text("\(project.activities.count)개").font(.caption).foregroundColor(.gray)
                     }
                     .contentShape(Rectangle())
                     .onTapGesture { projectToEdit = project }
@@ -253,8 +248,11 @@ struct ProjectManagerView: View {
                     }
                 }
                 .onMove { from, to in
-                    dataModel.projects.move(fromOffsets: from, toOffset: to)
-                    dataModel.saveAll()
+                    var sorted = projects
+                    sorted.move(fromOffsets: from, toOffset: to)
+                    for (index, project) in sorted.enumerated() {
+                        project.sortOrder = index
+                    }
                 }
             }
             .environment(\.editMode, .constant(.active))
@@ -278,7 +276,7 @@ struct ProjectManagerView: View {
             .alert("프로젝트 삭제", isPresented: $showingDeleteAlert) {
                 Button("삭제", role: .destructive) {
                     if let project = projectToDelete {
-                        dataModel.deleteProject(project)
+                        modelContext.delete(project)
                     }
                 }
                 Button("취소", role: .cancel) {}
@@ -293,7 +291,8 @@ struct ProjectManagerView: View {
 
 // MARK: - 프로젝트 추가
 struct AddProjectView: View {
-    @EnvironmentObject var dataModel: DataModel
+    @Environment(\.modelContext) var modelContext
+    @Query(sort: \Project.sortOrder) var projects: [Project]
     @Binding var isPresented: Bool
     @State private var name = ""
     @State private var icon = "📌"
@@ -325,7 +324,8 @@ struct AddProjectView: View {
                 ToolbarItem(placement: .automatic) {
                     Button("추가") {
                         if !name.isEmpty {
-                            dataModel.addProject(name: name, icon: icon)
+                            let project = Project(name: name, icon: icon, sortOrder: projects.count)
+                            modelContext.insert(project)
                             isPresented = false
                         }
                     }
@@ -341,27 +341,34 @@ struct AddProjectView: View {
 
 // MARK: - 프로젝트 수정
 struct EditProjectView: View {
-    @EnvironmentObject var dataModel: DataModel
     @Environment(\.dismiss) var dismiss
-    @State var project: Project
+    let project: Project
+    @State private var name: String
+    @State private var icon: String
 
     let suggestedIcons = ["🎮","📚","💬","🎬","💪","💼","📌","🎵","🍳","✈️","🎨","📷","🏃","💰","🧘","📝","🎯","🛒","🐾","🌱"]
+
+    init(project: Project) {
+        self.project = project
+        _name = State(initialValue: project.name)
+        _icon = State(initialValue: project.icon)
+    }
 
     var body: some View {
         NavigationView {
             Form {
                 Section(header: Text("프로젝트 이름")) {
-                    TextField("이름", text: $project.name)
+                    TextField("이름", text: $name)
                 }
                 Section(header: Text("아이콘")) {
-                    TextField("이모지 입력", text: $project.icon).font(.title2)
+                    TextField("이모지 입력", text: $icon).font(.title2)
                     LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 5), spacing: 12) {
                         ForEach(suggestedIcons, id: \.self) { emoji in
                             Text(emoji).font(.title2)
                                 .frame(width: 44, height: 44)
-                                .background(project.icon == emoji ? Color.blue.opacity(0.2) : Color.gray.opacity(0.1))
+                                .background(icon == emoji ? Color.blue.opacity(0.2) : Color.gray.opacity(0.1))
                                 .cornerRadius(8)
-                                .onTapGesture { project.icon = emoji }
+                                .onTapGesture { icon = emoji }
                         }
                     }
                     .padding(.vertical, 4)
@@ -371,10 +378,11 @@ struct EditProjectView: View {
             .toolbar {
                 ToolbarItem(placement: .automatic) {
                     Button("저장") {
-                        dataModel.updateProject(project)
+                        project.name = name
+                        project.icon = icon
                         dismiss()
                     }
-                    .disabled(project.name.isEmpty)
+                    .disabled(name.isEmpty)
                 }
                 ToolbarItem(placement: .cancellationAction) {
                     Button("취소") { dismiss() }
@@ -386,7 +394,8 @@ struct EditProjectView: View {
 
 // MARK: - 활동 추가
 struct AddActivityView: View {
-    @EnvironmentObject var dataModel: DataModel
+    @Environment(\.modelContext) var modelContext
+    @Query(sort: \Project.sortOrder) var projects: [Project]
     @Binding var isPresented: Bool
     @State private var selectedProject: Project? = nil
     @State private var name = ""
@@ -406,7 +415,7 @@ struct AddActivityView: View {
 
     var projectSelectionView: some View {
         List {
-            ForEach(dataModel.projects) { project in
+            ForEach(projects) { project in
                 HStack {
                     Text(project.icon).font(.title2)
                     Text(project.name).font(.body)
@@ -458,7 +467,8 @@ struct AddActivityView: View {
                 Button("추가") {
                     if !name.isEmpty, let project = selectedProject {
                         let goal = TimeInterval(dailyGoalHours * 3600 + dailyGoalMinutes * 60)
-                        dataModel.addActivity(name: name, projectId: project.id, dailyGoal: goal)
+                        let activity = Activity(name: name, project: project, dailyGoal: goal, sortOrder: project.activities.count)
+                        modelContext.insert(activity)
                         isPresented = false
                     }
                 }
@@ -473,36 +483,41 @@ struct AddActivityView: View {
 
 // MARK: - 활동 수정
 struct EditActivityView: View {
-    @EnvironmentObject var dataModel: DataModel
+    @Environment(\.modelContext) var modelContext
     @Environment(\.dismiss) var dismiss
-    @State var activity: Activity
-    @State private var dailyGoalHours: Int = 0
-    @State private var dailyGoalMinutes: Int = 0
+    @Query(sort: \Project.sortOrder) var projects: [Project]
+    let activity: Activity
+    @State private var name: String
+    @State private var dailyGoalHours: Int
+    @State private var dailyGoalMinutes: Int
+    @State private var selectedProject: Project?
 
     init(activity: Activity) {
-        _activity = State(initialValue: activity)
+        self.activity = activity
+        _name = State(initialValue: activity.name)
         let totalSeconds = Int(activity.dailyGoal)
         _dailyGoalHours = State(initialValue: totalSeconds / 3600)
         _dailyGoalMinutes = State(initialValue: (totalSeconds % 3600) / 60)
+        _selectedProject = State(initialValue: activity.project)
     }
 
     var body: some View {
         NavigationView {
             Form {
                 Section(header: Text("활동 이름")) {
-                    TextField("이름", text: $activity.name)
+                    TextField("이름", text: $name)
                 }
                 Section(header: Text("프로젝트")) {
-                    ForEach(dataModel.projects) { project in
+                    ForEach(projects) { project in
                         HStack {
                             Text("\(project.icon) \(project.name)")
                             Spacer()
-                            if activity.projectId == project.id {
+                            if selectedProject?.id == project.id {
                                 Image(systemName: "checkmark").foregroundColor(.blue)
                             }
                         }
                         .contentShape(Rectangle())
-                        .onTapGesture { activity.projectId = project.id }
+                        .onTapGesture { selectedProject = project }
                     }
                 }
                 Section(header: Text("하루 목표 시간")) {
@@ -522,8 +537,11 @@ struct EditActivityView: View {
             .toolbar {
                 ToolbarItem(placement: .automatic) {
                     Button("저장") {
+                        activity.name = name
                         activity.dailyGoal = TimeInterval(dailyGoalHours * 3600 + dailyGoalMinutes * 60)
-                        dataModel.updateActivity(activity)
+                        if let project = selectedProject {
+                            activity.project = project
+                        }
                         dismiss()
                     }
                 }
@@ -536,5 +554,6 @@ struct EditActivityView: View {
 }
 
 #Preview {
-    ProjectView().environmentObject(DataModel())
+    ProjectView()
+        .modelContainer(sharedModelContainer)
 }

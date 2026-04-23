@@ -1,8 +1,12 @@
 import SwiftUI
+import SwiftData
 import UniformTypeIdentifiers
 
 struct SettingsView: View {
-    @EnvironmentObject var dataModel: DataModel
+    @Environment(\.modelContext) var modelContext
+    @Query(sort: \Project.sortOrder) var projects: [Project]
+    @Query var allActivities: [Activity]
+    @Query var allRecords: [TimeRecord]
     @State private var showingExporter = false
     @State private var showingImporter = false
     @State private var showingRestoreAlert = false
@@ -43,17 +47,17 @@ struct SettingsView: View {
                     HStack {
                         Text("프로젝트")
                         Spacer()
-                        Text("\(dataModel.projects.count)개").foregroundColor(.gray)
+                        Text("\(projects.count)개").foregroundColor(.gray)
                     }
                     HStack {
                         Text("활동")
                         Spacer()
-                        Text("\(dataModel.activities.count)개").foregroundColor(.gray)
+                        Text("\(allActivities.count)개").foregroundColor(.gray)
                     }
                     HStack {
                         Text("기록")
                         Spacer()
-                        Text("\(dataModel.records.count)개").foregroundColor(.gray)
+                        Text("\(allRecords.count)개").foregroundColor(.gray)
                     }
                 }
             }
@@ -80,8 +84,8 @@ struct SettingsView: View {
                 switch result {
                 case .success(let url):
                     alertMessage = "기존 데이터가 모두 덮어씌워져요. 복원할까요?"
-                       showingRestoreAlert = true
-                       pendingRestoreURL = url
+                    showingRestoreAlert = true
+                    pendingRestoreURL = url
                 case .failure(let error):
                     alertMessage = "불러오기 실패: \(error.localizedDescription)"
                     showingSuccessAlert = true
@@ -104,11 +108,16 @@ struct SettingsView: View {
     }
 
     func exportBackup() {
-        let backup = BackupData(
-            projects: dataModel.projects,
-            activities: dataModel.activities,
-            records: dataModel.records
-        )
+        let backupProjects = projects.map {
+            BackupProject(id: $0.id, name: $0.name, icon: $0.icon, sortOrder: $0.sortOrder)
+        }
+        let backupActivities = allActivities.map {
+            BackupActivity(id: $0.id, name: $0.name, projectId: $0.project?.id ?? UUID(), dailyGoal: $0.dailyGoal, sortOrder: $0.sortOrder)
+        }
+        let backupRecords = allRecords.map {
+            BackupRecord(id: $0.id, activityId: $0.activity?.id ?? UUID(), duration: $0.duration, date: $0.date)
+        }
+        let backup = BackupData(projects: backupProjects, activities: backupActivities, records: backupRecords)
         if let data = try? JSONEncoder().encode(backup) {
             backupDocument = BackupDocument(data: data)
             showingExporter = true
@@ -126,10 +135,33 @@ struct SettingsView: View {
             return
         }
 
-        dataModel.projects = backup.projects
-        dataModel.activities = backup.activities
-        dataModel.records = backup.records
-        dataModel.saveAll()
+        allRecords.forEach { modelContext.delete($0) }
+        allActivities.forEach { modelContext.delete($0) }
+        projects.forEach { modelContext.delete($0) }
+        try? modelContext.save()
+
+        var newProjects: [UUID: Project] = [:]
+        for bp in backup.projects {
+            let p = Project(id: bp.id, name: bp.name, icon: bp.icon, sortOrder: bp.sortOrder)
+            modelContext.insert(p)
+            newProjects[bp.id] = p
+        }
+
+        var newActivities: [UUID: Activity] = [:]
+        for ba in backup.activities {
+            guard let project = newProjects[ba.projectId] else { continue }
+            let a = Activity(id: ba.id, name: ba.name, project: project, dailyGoal: ba.dailyGoal, sortOrder: ba.sortOrder)
+            modelContext.insert(a)
+            newActivities[ba.id] = a
+        }
+
+        for br in backup.records {
+            guard let activity = newActivities[br.activityId] else { continue }
+            let r = TimeRecord(id: br.id, activity: activity, duration: br.duration, date: br.date)
+            modelContext.insert(r)
+        }
+
+        try? modelContext.save()
 
         alertMessage = "복원 완료! 프로젝트 \(backup.projects.count)개, 활동 \(backup.activities.count)개, 기록 \(backup.records.count)개를 불러왔어요."
         showingSuccessAlert = true
@@ -144,10 +176,32 @@ struct SettingsView: View {
 
 // MARK: - 백업 데이터 구조
 
+struct BackupProject: Codable {
+    var id: UUID
+    var name: String
+    var icon: String
+    var sortOrder: Int
+}
+
+struct BackupActivity: Codable {
+    var id: UUID
+    var name: String
+    var projectId: UUID
+    var dailyGoal: TimeInterval
+    var sortOrder: Int
+}
+
+struct BackupRecord: Codable {
+    var id: UUID
+    var activityId: UUID
+    var duration: TimeInterval
+    var date: Date
+}
+
 struct BackupData: Codable {
-    var projects: [Project]
-    var activities: [Activity]
-    var records: [TimeRecord]
+    var projects: [BackupProject]
+    var activities: [BackupActivity]
+    var records: [BackupRecord]
 }
 
 // MARK: - FileDocument
@@ -170,5 +224,6 @@ struct BackupDocument: FileDocument {
 }
 
 #Preview {
-    SettingsView().environmentObject(DataModel())
+    SettingsView()
+        .modelContainer(sharedModelContainer)
 }
