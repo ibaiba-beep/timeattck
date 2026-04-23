@@ -218,73 +218,8 @@ class DataModel: ObservableObject {
         UNUserNotificationCenter.current().add(request)
     }
 
-    // MARK: - 샘플 데이터
-    func loadSampleData() {
-        let sampleApps: [(String, String, TimeInterval, ClosedRange<Int>)] = [
-            ("카카오톡",    "SNS",        3600,  1800...5400),
-            ("인스타그램",  "SNS",        1800,  900...3600),
-            ("유튜브",      "엔터테인먼트", 7200, 3600...9000),
-            ("넷플릭스",    "엔터테인먼트", 5400, 1800...7200),
-            ("듀오링고",    "공부",        3600,  600...3000),
-            ("리디북스",    "공부",        2700,  900...4500),
-            ("배틀그라운드","게임",        7200,  1800...10800),
-            ("쿠키런",      "게임",        1800,  600...3600),
-            ("삼성헬스",    "건강/운동",   3600,  1200...5400),
-            ("슬랙",        "업무",        5400,  2700...7200),
-        ]
+   
 
-        var createdProjects: [Project] = []
-        for (name, categoryName, goal, _) in sampleApps {
-            if let cat = categories.first(where: { $0.name == categoryName }) {
-                let project = Project(name: name, categoryId: cat.id, dailyGoal: goal)
-                createdProjects.append(project)
-            }
-        }
-        projects = createdProjects
-        saveProjects()
-
-        var sampleRecords: [TimeRecord] = []
-        let calendar = Calendar.current
-        let today = Date()
-
-        for (index, project) in projects.enumerated() {
-            let range = sampleApps[index].3
-            for daysAgo in 0..<30 {
-                guard let date = calendar.date(byAdding: .day, value: -daysAgo, to: today) else { continue }
-                let weekday = calendar.component(.weekday, from: date)
-                let isWeekend = weekday == 1 || weekday == 7
-                let duration = TimeInterval(Int.random(in: isWeekend ? range.upperBound/2...range.upperBound : range))
-                let sessionCount = Int.random(in: 1...3)
-                for session in 0..<sessionCount {
-                    let sessionDuration = duration / TimeInterval(sessionCount)
-                    let hourOffset = session * 4
-                    let sessionDate = calendar.date(byAdding: .hour, value: hourOffset, to: date) ?? date
-                    sampleRecords.append(TimeRecord(projectId: project.id, duration: sessionDuration, date: sessionDate))
-                }
-            }
-        }
-        records = sampleRecords
-        saveRecords()
-    }
-    // MARK: - 샘플 데이터 제거 (1회용)
-    func removeSampleDataIfNeeded() {
-        guard !UserDefaults.standard.bool(forKey: "sampleDataRemoved") else { return }
-        
-        let sampleNames: Set<String> = [
-            "카카오톡", "인스타그램", "유튜브", "넷플릭스",
-            "듀오링고", "리디북스", "배틀그라운드", "쿠키런",
-            "삼성헬스", "슬랙"
-        ]
-        
-        let sampleProjectIds = projects.filter { sampleNames.contains($0.name) }.map { $0.id }
-        projects.removeAll { sampleNames.contains($0.name) }
-        saveProjects()
-        
-        records.removeAll { sampleProjectIds.contains($0.projectId) }
-        saveRecords()
-        
-        UserDefaults.standard.set(true, forKey: "sampleDataRemoved")
-    }
     // MARK: - 저장
     private func saveCategories() {
         if let data = try? JSONEncoder().encode(categories) {
