@@ -361,8 +361,14 @@ class DataModel: ObservableObject {
 
     private func loadRecords() {
         if let data = UserDefaults.standard.data(forKey: "records"),
-           let decoded = try? JSONDecoder().decode([TimeRecord].self, from: data) {
-            records = decoded
-        }
-    }
-}
+            let decoded = try? JSONDecoder().decode([TimeRecord].self, from: data) {
+             records = decoded
+         }
+     }
+
+     func saveAll() {
+         saveProjects()
+         saveActivities()
+         saveRecords()
+     }
+ }
