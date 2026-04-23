@@ -6,6 +6,7 @@ struct SettingsView: View {
     @State private var showingExporter = false
     @State private var showingImporter = false
     @State private var showingRestoreAlert = false
+    @State private var pendingRestoreURL: URL? = nil
     @State private var showingSuccessAlert = false
     @State private var alertMessage = ""
     @State private var backupDocument: BackupDocument? = nil
@@ -78,11 +79,23 @@ struct SettingsView: View {
             ) { result in
                 switch result {
                 case .success(let url):
-                    restoreBackup(from: url)
+                    alertMessage = "기존 데이터가 모두 덮어씌워져요. 복원할까요?"
+                       showingRestoreAlert = true
+                       pendingRestoreURL = url
                 case .failure(let error):
                     alertMessage = "불러오기 실패: \(error.localizedDescription)"
                     showingSuccessAlert = true
                 }
+            }
+            .alert("백업 복원", isPresented: $showingRestoreAlert) {
+                Button("복원", role: .destructive) {
+                    if let url = pendingRestoreURL {
+                        restoreBackup(from: url)
+                    }
+                }
+                Button("취소", role: .cancel) {}
+            } message: {
+                Text("기존 데이터가 모두 덮어씌워져요. 계속할까요?")
             }
             .alert(alertMessage, isPresented: $showingSuccessAlert) {
                 Button("확인", role: .cancel) {}

@@ -128,7 +128,8 @@ struct DayTimelineView: View {
                 let activity = dataModel.activities.first(where: { $0.id == record.activityId })
                 let project = activity.flatMap { dataModel.project(for: $0) }
                 let yOffset = yPosition(for: record.date)
-                let blockHeight = max(heightForDuration(record.duration), 28)
+                let maxHeight = hourHeight * 24 - yOffset
+                let blockHeight = max(min(heightForDuration(record.duration), maxHeight), 28)
                 let columnInfo = columns[index]
                 let colWidth = (blockWidth - 8) / CGFloat(columnInfo.total)
                 let xOffset = timeColumnWidth + 8 + colWidth * CGFloat(columnInfo.column)
@@ -189,7 +190,10 @@ struct DayTimelineView: View {
         return CGFloat(c.component(.hour, from: date)) * hourHeight + CGFloat(c.component(.minute, from: date)) / 60.0 * hourHeight
     }
 
-    func heightForDuration(_ duration: TimeInterval) -> CGFloat { CGFloat(duration / 3600.0) * hourHeight }
+    func heightForDuration(_ duration: TimeInterval) -> CGFloat {
+        let maxHeight = hourHeight * 24 - yPosition(for: recordToEdit?.date ?? Date())
+        return min(CGFloat(duration / 3600.0) * hourHeight, maxHeight)
+    }
 
     func projectColor(for project: Project?) -> Color {
         let palette: [Color] = [.purple, .blue, .pink, .orange, .green, .teal, .red, .cyan, .mint, .indigo]

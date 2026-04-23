@@ -7,6 +7,7 @@ struct ProjectView: View {
     @State private var activityToDelete: Activity? = nil
     @State private var showingDeleteAlert = false
     @State private var activityToEdit: Activity? = nil
+    @State private var isReordering = false
 
     var todaySummary: (achieved: Int, total: Int) {
         dataModel.todayGoalSummary()
@@ -26,8 +27,12 @@ struct ProjectView: View {
                                 Text("\(project.icon) \(project.name)")
                                     .font(.headline)
                                     .padding(.horizontal)
-                                ForEach(projectActivities) { activity in
-                                    activityCard(activity: activity)
+                                if isReordering {
+                                    ReorderableActivityList(project: project)
+                                } else {
+                                    ForEach(projectActivities) { activity in
+                                        activityCard(activity: activity)
+                                    }
                                 }
                             }
                         }
@@ -44,6 +49,9 @@ struct ProjectView: View {
                         }
                         Button(action: { showingProjectManager = true }) {
                             Label("프로젝트 관리", systemImage: "folder.badge.gear")
+                        }
+                        Button(action: { isReordering.toggle() }) {
+                            Label(isReordering ? "순서 변경 완료" : "순서 변경", systemImage: isReordering ? "checkmark" : "arrow.up.arrow.down")
                         }
                     } label: {
                         Image(systemName: "ellipsis.circle")
@@ -64,7 +72,7 @@ struct ProjectView: View {
                     if let activity = activityToDelete {
                         dataModel.activities.removeAll { $0.id == activity.id }
                         dataModel.records.removeAll { $0.activityId == activity.id }
-                        dataModel.saveRecords()
+                        dataModel.saveAll()
                     }
                 }
                 Button("취소", role: .cancel) {}
@@ -168,6 +176,51 @@ struct ProjectView: View {
     }
 }
 
+// MARK: - 순서 변경 리스트
+struct ReorderableActivityList: View {
+    @EnvironmentObject var dataModel: DataModel
+    let project: Project
+
+    var projectActivities: [Activity] {
+        dataModel.activities(for: project)
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ForEach(projectActivities) { activity in
+                HStack {
+                    Image(systemName: "line.3.horizontal")
+                        .foregroundColor(.gray)
+                        .padding(.leading)
+                    Text(activity.name)
+                        .font(.body)
+                        .padding(.vertical, 12)
+                    Spacer()
+                }
+                .background(Color.gray.opacity(0.08))
+                .cornerRadius(12)
+                .padding(.horizontal)
+                .padding(.vertical, 2)
+            }
+            .onMove { from, to in
+                var allActivities = dataModel.activities
+                let projectIds = projectActivities.map { $0.id }
+                var filtered = allActivities.filter { projectIds.contains($0.id) }
+                filtered.move(fromOffsets: from, toOffset: to)
+                for activity in filtered {
+                    if let idx = allActivities.firstIndex(where: { $0.id == activity.id }) {
+                        allActivities.remove(at: idx)
+                    }
+                }
+                let firstIdx = allActivities.firstIndex(where: { $0.projectId == project.id }) ?? allActivities.count
+                allActivities.insert(contentsOf: filtered, at: firstIdx)
+                dataModel.activities = allActivities
+                dataModel.saveAll()
+            }
+        }
+    }
+}
+
 // MARK: - 프로젝트 관리
 struct ProjectManagerView: View {
     @EnvironmentObject var dataModel: DataModel
@@ -199,7 +252,12 @@ struct ProjectManagerView: View {
                         }
                     }
                 }
+                .onMove { from, to in
+                    dataModel.projects.move(fromOffsets: from, toOffset: to)
+                    dataModel.saveAll()
+                }
             }
+            .environment(\.editMode, .constant(.active))
             .navigationTitle("프로젝트 관리")
             .toolbar {
                 ToolbarItem(placement: .automatic) {
@@ -326,7 +384,7 @@ struct EditProjectView: View {
     }
 }
 
-// MARK: - 활동 추가 (2단계: 프로젝트 선택 → 활동 입력)
+// MARK: - 활동 추가
 struct AddActivityView: View {
     @EnvironmentObject var dataModel: DataModel
     @Binding var isPresented: Bool
@@ -334,7 +392,7 @@ struct AddActivityView: View {
     @State private var name = ""
     @State private var dailyGoalHours: Int = 0
     @State private var dailyGoalMinutes: Int = 0
-    @State private var step = 1  // 1: 프로젝트 선택, 2: 활동 입력
+    @State private var step = 1
 
     var body: some View {
         NavigationView {
@@ -375,8 +433,7 @@ struct AddActivityView: View {
             Section(header: Text("프로젝트")) {
                 HStack {
                     Text(selectedProject?.icon ?? "📌")
-                    Text(selectedProject?.name ?? "")
-                        .foregroundColor(.blue)
+                    Text(selectedProject?.name ?? "").foregroundColor(.blue)
                 }
             }
             Section(header: Text("활동 이름")) {

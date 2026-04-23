@@ -256,11 +256,16 @@ struct DayDetailView: View {
         let formatter = DateFormatter()
         formatter.dateFormat = "M/d"
         formatter.locale = Locale(identifier: "ko_KR")
-        formatter.timeZone = TimeZone.current
-        let year = Calendar.current.component(.year, from: Date())
         guard let parsed = formatter.date(from: dateString) else { return nil }
+        let now = Date()
+        let year = Calendar.current.component(.year, from: now)
         var components = Calendar.current.dateComponents([.month, .day], from: parsed)
-        components.year = year; components.hour = 0; components.minute = 0; components.second = 0
+        components.year = year
+        components.hour = 0; components.minute = 0; components.second = 0
+        // 미래 날짜면 작년으로 처리
+        if let date = Calendar.current.date(from: components), date > now {
+            components.year = year - 1
+        }
         return Calendar.current.date(from: components)
     }
 

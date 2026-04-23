@@ -210,7 +210,17 @@ class DataModel: ObservableObject {
         records.append(record)
         records.sort { $0.date < $1.date }
         saveRecords()
-        checkGoal(activityId: activityId)
+        func checkGoal(activityId: UUID) {
+            guard let activity = activities.first(where: { $0.id == activityId }),
+                  activity.dailyGoal > 0 else { return }
+            let today = Calendar.current.startOfDay(for: Date())
+            let notifiedKey = "notified_\(activityId.uuidString)_\(today.timeIntervalSince1970)"
+            guard !UserDefaults.standard.bool(forKey: notifiedKey) else { return }
+            if todayTime(for: activity) >= activity.dailyGoal {
+                sendNotification(activity: activity)
+                UserDefaults.standard.set(true, forKey: notifiedKey)
+            }
+        }
     }
 
     func deleteRecord(_ record: TimeRecord) {
