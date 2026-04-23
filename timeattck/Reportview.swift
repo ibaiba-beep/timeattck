@@ -18,8 +18,7 @@ struct ReportView: View {
                         Text("월별").tag(1)
                         Text("기록").tag(2)
                     }
-                    .pickerStyle(.segmented)
-                    .padding(.horizontal)
+                    .pickerStyle(.segmented).padding(.horizontal)
 
                     switch selectedPeriod {
                     case 0: weeklyView
@@ -32,21 +31,19 @@ struct ReportView: View {
             }
             .navigationTitle("리포트")
             .sheet(isPresented: $showingDayDetail) {
-                if let date = selectedDate {
-                    DayDetailView(dateString: date)
-                }
+                if let date = selectedDate { DayDetailView(dateString: date) }
             }
         }
     }
 
     var weeklyView: some View {
-        let data = periodCategoryData(days: 7)
+        let data = periodProjectData(days: 7)
         let total = data.reduce(0.0) { $0 + $1.1 }
         return VStack(spacing: 20) {
             summaryCard(title: "이번 주 총 사용시간", hours: total)
             if !data.isEmpty {
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("카테고리 비중").font(.headline).padding(.horizontal)
+                    Text("프로젝트 비중").font(.headline).padding(.horizontal)
                     PieChartView(data: data, total: total)
                         .frame(width: 260, height: 260).frame(maxWidth: .infinity)
                     legendView(data: data, total: total)
@@ -82,13 +79,13 @@ struct ReportView: View {
     }
 
     var monthlyView: some View {
-        let data = periodCategoryData(days: 30)
+        let data = periodProjectData(days: 30)
         let total = data.reduce(0.0) { $0 + $1.1 }
         return VStack(spacing: 20) {
             summaryCard(title: "이번 달 총 사용시간", hours: total)
             if !data.isEmpty {
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("카테고리 비중").font(.headline).padding(.horizontal)
+                    Text("프로젝트 비중").font(.headline).padding(.horizontal)
                     PieChartView(data: data, total: total)
                         .frame(width: 260, height: 260).frame(maxWidth: .infinity)
                     legendView(data: data, total: total)
@@ -104,15 +101,15 @@ struct ReportView: View {
                     .frame(height: 180).padding(.horizontal)
                 }
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("TOP 5 앱").font(.headline).padding(.horizontal)
-                    ForEach(Array(topProjects(days: 30).enumerated()), id: \.1.0.id) { index, item in
+                    Text("TOP 5 활동").font(.headline).padding(.horizontal)
+                    ForEach(Array(topActivities(days: 30).enumerated()), id: \.1.0.id) { index, item in
                         HStack(spacing: 12) {
                             Text("\(index + 1)").font(.caption).fontWeight(.bold).foregroundColor(.white)
                                 .frame(width: 24, height: 24).background(medalColor(index)).clipShape(Circle())
-                            let category = dataModel.category(for: item.0)
-                            Text("\(category?.icon ?? "📌") \(item.0.name)").font(.body).lineLimit(1)
+                            let project = dataModel.project(for: item.0)
+                            Text("\(project?.icon ?? "📌") \(item.0.name)").font(.body).lineLimit(1)
                             Spacer()
-                            Text(String(format: "%.1f시간", item.1)).font(.body).fontWeight(.medium).foregroundColor(.purple)
+                            Text(timeString(from: item.1 * 3600)).font(.body).fontWeight(.medium).foregroundColor(.purple)
                         }
                         .padding().background(Color.gray.opacity(0.1)).cornerRadius(12).padding(.horizontal)
                     }
@@ -124,28 +121,35 @@ struct ReportView: View {
     var recordListView: some View {
         VStack(spacing: 16) {
             ForEach(dataModel.projects) { project in
-                let category = dataModel.category(for: project)
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        Text("\(category?.icon ?? "📌") \(project.name)").font(.headline)
-                        Spacer()
-                        Text("총 " + timeString(from: dataModel.totalTime(for: project)))
-                            .font(.caption).foregroundColor(.blue).fontWeight(.medium)
-                    }.padding(.horizontal)
-                    let records = dataModel.records(for: project).sorted { $0.date > $1.date }.prefix(5)
-                    if records.isEmpty {
-                        Text("기록 없음").foregroundColor(.gray).font(.caption).padding(.horizontal)
-                    } else {
-                        ForEach(records) { record in
-                            HStack {
-                                Text(dateString(from: record.date)).font(.caption).foregroundColor(.gray)
-                                Spacer()
-                                Text(timeString(from: record.duration)).font(.body).fontWeight(.medium)
-                                Button(action: { recordToDelete = record; showingDeleteAlert = true }) {
-                                    Image(systemName: "trash").foregroundColor(.red).font(.caption)
+                let projectActivities = dataModel.activities(for: project)
+                if !projectActivities.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("\(project.icon) \(project.name)").font(.headline).padding(.horizontal)
+                        ForEach(projectActivities) { activity in
+                            VStack(alignment: .leading, spacing: 4) {
+                                HStack {
+                                    Text(activity.name).font(.subheadline).fontWeight(.medium)
+                                    Spacer()
+                                    Text("총 " + timeString(from: dataModel.totalTime(for: activity)))
+                                        .font(.caption).foregroundColor(.blue).fontWeight(.medium)
+                                }.padding(.horizontal)
+                                let records = dataModel.records(for: activity).sorted { $0.date > $1.date }.prefix(5)
+                                if records.isEmpty {
+                                    Text("기록 없음").foregroundColor(.gray).font(.caption).padding(.horizontal)
+                                } else {
+                                    ForEach(records) { record in
+                                        HStack {
+                                            Text(dateString(from: record.date)).font(.caption).foregroundColor(.gray)
+                                            Spacer()
+                                            Text(timeString(from: record.duration)).font(.body).fontWeight(.medium)
+                                            Button(action: { recordToDelete = record; showingDeleteAlert = true }) {
+                                                Image(systemName: "trash").foregroundColor(.red).font(.caption)
+                                            }
+                                        }
+                                        .padding().background(Color.gray.opacity(0.1)).cornerRadius(12).padding(.horizontal)
+                                    }
                                 }
                             }
-                            .padding().background(Color.gray.opacity(0.1)).cornerRadius(12).padding(.horizontal)
                         }
                     }
                 }
@@ -163,8 +167,7 @@ struct ReportView: View {
         HStack {
             VStack(alignment: .leading, spacing: 4) {
                 Text(title).font(.caption).foregroundColor(.gray)
-                Text(String(format: "%.0f시간 %.0f분", floor(hours), (hours - floor(hours)) * 60))
-                    .font(.title2).fontWeight(.bold)
+                Text(timeString(from: hours * 3600)).font(.title2).fontWeight(.bold)
             }
             Spacer()
         }
@@ -178,7 +181,7 @@ struct ReportView: View {
                     RoundedRectangle(cornerRadius: 4).fill(item.2).frame(width: 14, height: 14)
                     Text(item.0).font(.caption)
                     Spacer()
-                    Text(String(format: "%.1f시간", item.1)).font(.caption).foregroundColor(.gray)
+                    Text(timeString(from: item.1 * 3600)).font(.caption).foregroundColor(.gray)
                     Text(String(format: "%.0f%%", total > 0 ? item.1 / total * 100 : 0))
                         .font(.caption).fontWeight(.medium).frame(width: 36, alignment: .trailing)
                 }.padding(.horizontal)
@@ -190,18 +193,15 @@ struct ReportView: View {
         Text("아직 기록이 없어요").foregroundColor(.gray).frame(maxWidth: .infinity).padding()
     }
 
-    func periodCategoryData(days: Int) -> [(String, Double, Color)] {
+    func periodProjectData(days: Int) -> [(String, Double, Color)] {
         let colors: [Color] = [.blue, .purple, .pink, .orange, .green, .teal, .red, .cyan, .mint, .indigo]
         let calendar = Calendar.current
         let start = calendar.date(byAdding: .day, value: -days, to: Date())!
-        return dataModel.categories.enumerated().compactMap { index, category in
-            let categoryProjects = dataModel.projects.filter { $0.categoryId == category.id }
-            let total = categoryProjects.reduce(0.0) { sum, project in
-                sum + dataModel.records(for: project).filter { $0.date >= start }.reduce(0.0) { $0 + $1.duration }
+        return dataModel.projects.enumerated().compactMap { index, project in
+            let total = dataModel.activities(for: project).reduce(0.0) { sum, activity in
+                sum + dataModel.records(for: activity).filter { $0.date >= start }.reduce(0.0) { $0 + $1.duration }
             } / 3600.0
-            if total > 0 {
-                return ("\(category.icon) \(category.name)", total, colors[index % colors.count])
-            }
+            if total > 0 { return ("\(project.icon) \(project.name)", total, colors[index % colors.count]) }
             return nil
         }.sorted { $0.1 > $1.1 }
     }
@@ -217,11 +217,11 @@ struct ReportView: View {
         }
     }
 
-    func topProjects(days: Int) -> [(Project, Double)] {
+    func topActivities(days: Int) -> [(Activity, Double)] {
         let start = Calendar.current.date(byAdding: .day, value: -days, to: Date())!
-        return dataModel.projects.map { project in
-            let total = dataModel.records(for: project).filter { $0.date >= start }.reduce(0.0) { $0 + $1.duration } / 3600.0
-            return (project, total)
+        return dataModel.activities.map { activity in
+            let total = dataModel.records(for: activity).filter { $0.date >= start }.reduce(0.0) { $0 + $1.duration } / 3600.0
+            return (activity, total)
         }.filter { $0.1 > 0 }.sorted { $0.1 > $1.1 }.prefix(5).map { $0 }
     }
 
@@ -230,7 +230,13 @@ struct ReportView: View {
     }
 
     func timeString(from time: TimeInterval) -> String {
-        String(format: "%02d:%02d:%02d", Int(time) / 3600, Int(time) / 60 % 60, Int(time) % 60)
+        let totalSeconds = Int(time)
+        let days = totalSeconds / 86400
+        let hours = (totalSeconds % 86400) / 3600
+        let minutes = (totalSeconds % 3600) / 60
+        if days > 0 { return "\(days)일 \(hours)시간 \(minutes)분" }
+        if hours > 0 { return "\(hours)시간 \(minutes)분" }
+        return "\(minutes)분"
     }
 
     func dateString(from date: Date) -> String {
@@ -240,6 +246,7 @@ struct ReportView: View {
     }
 }
 
+// MARK: - 일별 상세
 struct DayDetailView: View {
     @EnvironmentObject var dataModel: DataModel
     @Environment(\.dismiss) var dismiss
@@ -253,36 +260,35 @@ struct DayDetailView: View {
         let year = Calendar.current.component(.year, from: Date())
         guard let parsed = formatter.date(from: dateString) else { return nil }
         var components = Calendar.current.dateComponents([.month, .day], from: parsed)
-        components.year = year
-        components.hour = 0; components.minute = 0; components.second = 0
+        components.year = year; components.hour = 0; components.minute = 0; components.second = 0
         return Calendar.current.date(from: components)
     }
 
-    var categoryData: [(String, Double, Color)] {
+    var projectData: [(String, Double, Color)] {
         guard let date = dayDate else { return [] }
         let start = Calendar.current.startOfDay(for: date)
         let end = Calendar.current.date(byAdding: .day, value: 1, to: start)!
         let colors: [Color] = [.blue, .purple, .pink, .orange, .green, .teal, .red]
-        return dataModel.categories.enumerated().compactMap { index, category in
-            let total = dataModel.projects.filter { $0.categoryId == category.id }.reduce(0.0) { sum, project in
-                sum + dataModel.records(for: project).filter { $0.date >= start && $0.date < end }.reduce(0.0) { $0 + $1.duration }
+        return dataModel.projects.enumerated().compactMap { index, project in
+            let total = dataModel.activities(for: project).reduce(0.0) { sum, activity in
+                sum + dataModel.records(for: activity).filter { $0.date >= start && $0.date < end }.reduce(0.0) { $0 + $1.duration }
             } / 3600.0
-            if total > 0 { return ("\(category.icon) \(category.name)", total, colors[index % colors.count]) }
+            if total > 0 { return ("\(project.icon) \(project.name)", total, colors[index % colors.count]) }
             return nil
         }.sorted { $0.1 > $1.1 }
     }
 
-    var topApps: [(Project, Double)] {
+    var topActivities: [(Activity, Double)] {
         guard let date = dayDate else { return [] }
         let start = Calendar.current.startOfDay(for: date)
         let end = Calendar.current.date(byAdding: .day, value: 1, to: start)!
-        return dataModel.projects.map { project in
-            let total = dataModel.records(for: project).filter { $0.date >= start && $0.date < end }.reduce(0.0) { $0 + $1.duration } / 3600.0
-            return (project, total)
+        return dataModel.activities.map { activity in
+            let total = dataModel.records(for: activity).filter { $0.date >= start && $0.date < end }.reduce(0.0) { $0 + $1.duration } / 3600.0
+            return (activity, total)
         }.filter { $0.1 > 0 }.sorted { $0.1 > $1.1 }
     }
 
-    var totalHours: Double { categoryData.reduce(0.0) { $0 + $1.1 } }
+    var totalHours: Double { projectData.reduce(0.0) { $0 + $1.1 } }
 
     var body: some View {
         NavigationView {
@@ -291,27 +297,26 @@ struct DayDetailView: View {
                     HStack {
                         VStack(alignment: .leading, spacing: 4) {
                             Text("\(dateString) 총 사용시간").font(.caption).foregroundColor(.gray)
-                            Text(String(format: "%.0f시간 %.0f분", floor(totalHours), (totalHours - floor(totalHours)) * 60))
-                                .font(.title2).fontWeight(.bold)
+                            Text(timeString(from: totalHours * 3600)).font(.title2).fontWeight(.bold)
                         }
                         Spacer()
                     }
                     .padding().background(Color.orange.opacity(0.1)).cornerRadius(16).padding(.horizontal)
 
-                    if categoryData.isEmpty {
+                    if projectData.isEmpty {
                         Text("이 날의 기록이 없어요").foregroundColor(.gray).padding()
                     } else {
                         VStack(alignment: .leading, spacing: 12) {
-                            Text("카테고리 비중").font(.headline).padding(.horizontal)
-                            PieChartView(data: categoryData, total: totalHours)
+                            Text("프로젝트 비중").font(.headline).padding(.horizontal)
+                            PieChartView(data: projectData, total: totalHours)
                                 .frame(width: 260, height: 260).frame(maxWidth: .infinity)
                             VStack(spacing: 8) {
-                                ForEach(categoryData, id: \.0) { item in
+                                ForEach(projectData, id: \.0) { item in
                                     HStack(spacing: 10) {
                                         RoundedRectangle(cornerRadius: 4).fill(item.2).frame(width: 14, height: 14)
                                         Text(item.0).font(.caption)
                                         Spacer()
-                                        Text(String(format: "%.1f시간", item.1)).font(.caption).foregroundColor(.gray)
+                                        Text(timeString(from: item.1 * 3600)).font(.caption).foregroundColor(.gray)
                                         Text(String(format: "%.0f%%", totalHours > 0 ? item.1 / totalHours * 100 : 0))
                                             .font(.caption).fontWeight(.medium).frame(width: 36, alignment: .trailing)
                                     }.padding(.horizontal)
@@ -319,11 +324,11 @@ struct DayDetailView: View {
                             }
                         }
                         VStack(alignment: .leading, spacing: 8) {
-                            Text("앱별 사용시간").font(.headline).padding(.horizontal)
-                            ForEach(topApps, id: \.0.id) { item in
-                                let category = dataModel.category(for: item.0)
+                            Text("활동별 사용시간").font(.headline).padding(.horizontal)
+                            ForEach(topActivities, id: \.0.id) { item in
+                                let project = dataModel.project(for: item.0)
                                 HStack {
-                                    Text("\(category?.icon ?? "📌") \(item.0.name)").font(.body).lineLimit(1)
+                                    Text("\(project?.icon ?? "📌") \(item.0.name)").font(.body).lineLimit(1)
                                     Spacer()
                                     GeometryReader { geo in
                                         ZStack(alignment: .leading) {
@@ -332,8 +337,8 @@ struct DayDetailView: View {
                                                 .frame(width: totalHours > 0 ? geo.size.width * CGFloat(item.1 / totalHours) : 0)
                                         }
                                     }.frame(width: 80, height: 8)
-                                    Text(String(format: "%.1fh", item.1)).font(.caption).fontWeight(.medium)
-                                        .foregroundColor(.orange).frame(width: 40, alignment: .trailing)
+                                    Text(timeString(from: item.1 * 3600)).font(.caption).fontWeight(.medium)
+                                        .foregroundColor(.orange).frame(width: 50, alignment: .trailing)
                                 }
                                 .padding().background(Color.gray.opacity(0.1)).cornerRadius(12).padding(.horizontal)
                             }
@@ -347,6 +352,16 @@ struct DayDetailView: View {
                 ToolbarItem(placement: .automatic) { Button("닫기") { dismiss() } }
             }
         }
+    }
+
+    func timeString(from time: TimeInterval) -> String {
+        let totalSeconds = Int(time)
+        let days = totalSeconds / 86400
+        let hours = (totalSeconds % 86400) / 3600
+        let minutes = (totalSeconds % 3600) / 60
+        if days > 0 { return "\(days)일 \(hours)시간 \(minutes)분" }
+        if hours > 0 { return "\(hours)시간 \(minutes)분" }
+        return "\(minutes)분"
     }
 }
 
@@ -374,9 +389,17 @@ struct PieChartView: View {
             }
             VStack(spacing: 2) {
                 Text("총").font(.caption).foregroundColor(.gray)
-                Text(String(format: "%.0f시간", total)).font(.title3).fontWeight(.bold)
+                Text(timeString(from: total * 3600)).font(.title3).fontWeight(.bold)
             }
         }
+    }
+
+    func timeString(from time: TimeInterval) -> String {
+        let totalSeconds = Int(time)
+        let hours = totalSeconds / 3600
+        let minutes = (totalSeconds % 3600) / 60
+        if hours > 0 { return "\(hours)시간 \(minutes)분" }
+        return "\(minutes)분"
     }
 }
 

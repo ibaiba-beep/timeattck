@@ -66,7 +66,7 @@ struct DayTimelineView: View {
             }
             .padding(.vertical, 8)
             .onAppear { proxy.scrollTo(recentDates.last, anchor: .trailing) }
-            .onChange(of: selectedDate) {_, newDate in withAnimation { proxy.scrollTo(newDate, anchor: .center) } }
+            .onChange(of: selectedDate) { _, newDate in withAnimation { proxy.scrollTo(newDate, anchor: .center) } }
         }
     }
 
@@ -122,20 +122,26 @@ struct DayTimelineView: View {
     var recordBlocks: some View {
         GeometryReader { geo in
             let blockWidth = geo.size.width - timeColumnWidth - 16
-            ForEach(dayRecords) { record in
-                let project = dataModel.projects.first(where: { $0.id == record.projectId })
-                let category = project.flatMap { dataModel.category(for: $0) }
+            // 겹침 방지: 같은 시간대 기록을 컬럼으로 분산
+            let columns = layoutColumns(for: dayRecords)
+            ForEach(Array(dayRecords.enumerated()), id: \.element.id) { index, record in
+                let activity = dataModel.activities.first(where: { $0.id == record.activityId })
+                let project = activity.flatMap { dataModel.project(for: $0) }
                 let yOffset = yPosition(for: record.date)
                 let blockHeight = max(heightForDuration(record.duration), 28)
+                let columnInfo = columns[index]
+                let colWidth = (blockWidth - 8) / CGFloat(columnInfo.total)
+                let xOffset = timeColumnWidth + 8 + colWidth * CGFloat(columnInfo.column)
+
                 ZStack(alignment: .topLeading) {
                     RoundedRectangle(cornerRadius: 6)
-                        .fill(categoryColor(category?.name).opacity(0.2))
-                        .overlay(RoundedRectangle(cornerRadius: 6).stroke(categoryColor(category?.name), lineWidth: 1.5))
+                        .fill(projectColor(for: project).opacity(0.2))
+                        .overlay(RoundedRectangle(cornerRadius: 6).stroke(projectColor(for: project), lineWidth: 1.5))
                     VStack(alignment: .leading, spacing: 2) {
                         HStack(spacing: 4) {
-                            Text(category?.icon ?? "📌").font(.system(size: 10))
-                            Text(project?.name ?? "알 수 없음").font(.caption).fontWeight(.medium).lineLimit(1)
-                                .foregroundColor(categoryColor(category?.name))
+                            Text(project?.icon ?? "📌").font(.system(size: 10))
+                            Text(activity?.name ?? "알 수 없음").font(.caption).fontWeight(.medium).lineLimit(1)
+                                .foregroundColor(projectColor(for: project))
                         }
                         if blockHeight > 44 {
                             Text(timeString(from: record.duration)).font(.caption2).foregroundColor(.gray)
@@ -143,8 +149,8 @@ struct DayTimelineView: View {
                     }
                     .padding(.horizontal, 6).padding(.vertical, 4)
                 }
-                .frame(width: blockWidth - 8, height: blockHeight)
-                .offset(x: timeColumnWidth + 8, y: yOffset)
+                .frame(width: colWidth - 2, height: blockHeight)
+                .offset(x: xOffset, y: yOffset)
                 .onTapGesture { recordToEdit = record }
                 .contextMenu {
                     Button(action: { recordToEdit = record }) { Label("수정", systemImage: "pencil") }
@@ -156,6 +162,28 @@ struct DayTimelineView: View {
         }
     }
 
+    // 겹치는 기록을 컬럼으로 나누는 레이아웃 계산
+    func layoutColumns(for records: [TimeRecord]) -> [(column: Int, total: Int)] {
+        var result = Array(repeating: (column: 0, total: 1), count: records.count)
+        for i in 0..<records.count {
+            var overlapping = [i]
+            let startI = records[i].date
+            let endI = startI.addingTimeInterval(records[i].duration)
+            for j in 0..<records.count where i != j {
+                let startJ = records[j].date
+                let endJ = startJ.addingTimeInterval(records[j].duration)
+                if startI < endJ && endI > startJ {
+                    overlapping.append(j)
+                }
+            }
+            let total = overlapping.count
+            for (col, idx) in overlapping.sorted().enumerated() {
+                result[idx] = (column: col, total: total)
+            }
+        }
+        return result
+    }
+
     func yPosition(for date: Date) -> CGFloat {
         let c = Calendar.current
         return CGFloat(c.component(.hour, from: date)) * hourHeight + CGFloat(c.component(.minute, from: date)) / 60.0 * hourHeight
@@ -163,16 +191,11 @@ struct DayTimelineView: View {
 
     func heightForDuration(_ duration: TimeInterval) -> CGFloat { CGFloat(duration / 3600.0) * hourHeight }
 
-    func categoryColor(_ categoryName: String?) -> Color {
-        switch categoryName {
-        case "게임": return .purple
-        case "공부": return .blue
-        case "SNS": return .pink
-        case "엔터테인먼트": return .orange
-        case "건강/운동": return .green
-        case "업무": return .teal
-        default: return .gray
-        }
+    func projectColor(for project: Project?) -> Color {
+        let palette: [Color] = [.purple, .blue, .pink, .orange, .green, .teal, .red, .cyan, .mint, .indigo]
+        guard let p = project,
+              let index = dataModel.projects.firstIndex(where: { $0.id == p.id }) else { return .gray }
+        return palette[index % palette.count]
     }
 
     func dayOfWeek(from date: Date) -> String {
@@ -185,16 +208,23 @@ struct DayTimelineView: View {
     }
 
     func timeString(from time: TimeInterval) -> String {
-        String(format: "%02d:%02d:%02d", Int(time) / 3600, Int(time) / 60 % 60, Int(time) % 60)
+        let totalSeconds = Int(time)
+        let hours = totalSeconds / 3600
+        let minutes = (totalSeconds % 3600) / 60
+        if hours > 0 { return "\(hours)시간 \(minutes)분" }
+        return "\(minutes)분"
     }
 }
 
+// MARK: - 기록 추가 (2단계: 프로젝트 선택 → 활동 선택)
 struct AddRecordView: View {
     @EnvironmentObject var dataModel: DataModel
     @Environment(\.dismiss) var dismiss
     @State var startDate: Date
     @State private var endDate: Date
     @State private var selectedProject: Project? = nil
+    @State private var selectedActivity: Activity? = nil
+    @State private var step = 1  // 1: 프로젝트 선택, 2: 활동 선택 + 시간 입력
     let selectedDate: Date
 
     init(startDate: Date, selectedDate: Date) {
@@ -205,70 +235,107 @@ struct AddRecordView: View {
 
     var body: some View {
         NavigationView {
-            Form {
-                Section(header: Text("앱 선택")) {
-                    ForEach(dataModel.categories) { category in
-                        let categoryProjects = dataModel.projects.filter { $0.categoryId == category.id }
-                        if !categoryProjects.isEmpty {
-                            Section(header: Text("\(category.icon) \(category.name)").font(.caption)) {
-                                ForEach(categoryProjects) { project in
-                                    HStack {
-                                        Text(project.name)
-                                        Spacer()
-                                        if selectedProject?.id == project.id {
-                                            Image(systemName: "checkmark").foregroundColor(.blue)
-                                        }
-                                    }
-                                    .contentShape(Rectangle())
-                                    .onTapGesture { selectedProject = project }
-                                }
-                            }
-                        }
-                    }
-                }
-                Section(header: Text("시작 시간")) {
-                    DatePicker("시작", selection: $startDate, displayedComponents: [.hourAndMinute]).labelsHidden()
-                }
-                Section(header: Text("종료 시간")) {
-                    DatePicker("종료", selection: $endDate, displayedComponents: [.hourAndMinute]).labelsHidden()
-                }
-                Section {
-                    HStack {
-                        Text("총 시간")
-                        Spacer()
-                        let duration = max(endDate.timeIntervalSince(startDate), 0)
-                        Text(timeString(from: duration)).foregroundColor(.blue).fontWeight(.medium)
-                    }
-                }
-            }
-            .navigationTitle("기록 추가")
-            .toolbar {
-                ToolbarItem(placement: .automatic) {
-                    Button("추가") {
-                        guard let project = selectedProject else { return }
-                        let duration = max(endDate.timeIntervalSince(startDate), 0)
-                        if duration > 0 {
-                            let newRecord = TimeRecord(projectId: project.id, duration: duration, date: startDate)
-                            dataModel.records.append(newRecord)
-                            dataModel.records.sort { $0.date < $1.date }
-                            if let data = try? JSONEncoder().encode(dataModel.records) {
-                                UserDefaults.standard.set(data, forKey: "records")
-                            }
-                        }
-                        dismiss()
-                    }
-                    .disabled(selectedProject == nil || endDate <= startDate)
-                }
-                ToolbarItem(placement: .cancellationAction) { Button("취소") { dismiss() } }
+            if step == 1 {
+                projectSelectionView
+            } else {
+                activityAndTimeView
             }
         }
     }
 
+    var projectSelectionView: some View {
+        List {
+            ForEach(dataModel.projects) { project in
+                let count = dataModel.activities(for: project).count
+                if count > 0 {
+                    HStack {
+                        Text(project.icon).font(.title2)
+                        Text(project.name).font(.body)
+                        Spacer()
+                        Text("\(count)개").font(.caption).foregroundColor(.gray)
+                        Image(systemName: "chevron.right").foregroundColor(.gray).font(.caption)
+                    }
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        selectedProject = project
+                        step = 2
+                    }
+                }
+            }
+        }
+        .navigationTitle("프로젝트 선택")
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) { Button("취소") { dismiss() } }
+        }
+    }
+
+    var activityAndTimeView: some View {
+        Form {
+            Section(header: Text("프로젝트")) {
+                HStack {
+                    Text(selectedProject?.icon ?? "📌")
+                    Text(selectedProject?.name ?? "").foregroundColor(.blue)
+                }
+                .contentShape(Rectangle())
+                .onTapGesture { step = 1 }
+            }
+            Section(header: Text("활동 선택")) {
+                if let project = selectedProject {
+                    ForEach(dataModel.activities(for: project)) { activity in
+                        HStack {
+                            Text(activity.name)
+                            Spacer()
+                            if selectedActivity?.id == activity.id {
+                                Image(systemName: "checkmark").foregroundColor(.blue)
+                            }
+                        }
+                        .contentShape(Rectangle())
+                        .onTapGesture { selectedActivity = activity }
+                    }
+                }
+            }
+            Section(header: Text("시작 시간")) {
+                DatePicker("시작", selection: $startDate, displayedComponents: [.hourAndMinute]).labelsHidden()
+            }
+            Section(header: Text("종료 시간")) {
+                DatePicker("종료", selection: $endDate, displayedComponents: [.hourAndMinute]).labelsHidden()
+            }
+            Section {
+                HStack {
+                    Text("총 시간")
+                    Spacer()
+                    let duration = max(endDate.timeIntervalSince(startDate), 0)
+                    Text(timeString(from: duration)).foregroundColor(.blue).fontWeight(.medium)
+                }
+            }
+        }
+        .navigationTitle("기록 추가")
+        .toolbar {
+            ToolbarItem(placement: .automatic) {
+                Button("추가") {
+                    guard let activity = selectedActivity else { return }
+                    let duration = max(endDate.timeIntervalSince(startDate), 0)
+                    if duration > 0 {
+                        dataModel.addRecord(activityId: activity.id, duration: duration)
+                    }
+                    dismiss()
+                }
+                .disabled(selectedActivity == nil || endDate <= startDate)
+            }
+            ToolbarItem(placement: .cancellationAction) { Button("취소") { dismiss() } }
+        }
+    }
+
     func timeString(from time: TimeInterval) -> String {
-        String(format: "%02d:%02d:%02d", Int(time) / 3600, Int(time) / 60 % 60, Int(time) % 60)
+        let totalSeconds = Int(time)
+        let hours = totalSeconds / 3600
+        let minutes = (totalSeconds % 3600) / 60
+        if hours > 0 { return "\(hours)시간 \(minutes)분" }
+        return "\(minutes)분"
     }
 }
 
+// MARK: - 기록 수정
 struct EditRecordView: View {
     @EnvironmentObject var dataModel: DataModel
     @Environment(\.dismiss) var dismiss
@@ -282,16 +349,16 @@ struct EditRecordView: View {
         _endDate = State(initialValue: record.date.addingTimeInterval(record.duration))
     }
 
-    var project: Project? { dataModel.projects.first(where: { $0.id == record.projectId }) }
+    var activity: Activity? { dataModel.activities.first(where: { $0.id == record.activityId }) }
 
     var body: some View {
         NavigationView {
             Form {
-                Section(header: Text("앱")) {
+                Section(header: Text("활동")) {
                     HStack {
-                        let category = project.flatMap { dataModel.category(for: $0) }
-                        Text(category?.icon ?? "📌")
-                        Text(project?.name ?? "알 수 없음")
+                        let project = activity.flatMap { dataModel.project(for: $0) }
+                        Text(project?.icon ?? "📌")
+                        Text(activity?.name ?? "알 수 없음")
                     }
                 }
                 Section(header: Text("시작 시간")) {
@@ -315,13 +382,11 @@ struct EditRecordView: View {
                     Button("저장") {
                         let duration = max(endDate.timeIntervalSince(startDate), 0)
                         dataModel.deleteRecord(record)
-                        var newRecord = TimeRecord(projectId: record.projectId, duration: duration, date: startDate)
+                        var newRecord = TimeRecord(activityId: record.activityId, duration: duration, date: startDate)
                         newRecord.id = record.id
                         dataModel.records.append(newRecord)
                         dataModel.records.sort { $0.date < $1.date }
-                        if let data = try? JSONEncoder().encode(dataModel.records) {
-                            UserDefaults.standard.set(data, forKey: "records")
-                        }
+                        dataModel.saveRecords()
                         dismiss()
                     }
                     .disabled(endDate <= startDate)
@@ -332,7 +397,11 @@ struct EditRecordView: View {
     }
 
     func timeString(from time: TimeInterval) -> String {
-        String(format: "%02d:%02d:%02d", Int(time) / 3600, Int(time) / 60 % 60, Int(time) % 60)
+        let totalSeconds = Int(time)
+        let hours = totalSeconds / 3600
+        let minutes = (totalSeconds % 3600) / 60
+        if hours > 0 { return "\(hours)시간 \(minutes)분" }
+        return "\(minutes)분"
     }
 }
 

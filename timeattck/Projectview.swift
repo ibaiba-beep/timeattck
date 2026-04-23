@@ -2,11 +2,11 @@ import SwiftUI
 
 struct ProjectView: View {
     @EnvironmentObject var dataModel: DataModel
-    @State private var showingAddProject = false
-    @State private var showingCategoryManager = false
-    @State private var projectToDelete: Project? = nil
+    @State private var showingAddActivity = false
+    @State private var showingProjectManager = false
+    @State private var activityToDelete: Activity? = nil
     @State private var showingDeleteAlert = false
-    @State private var projectToEdit: Project? = nil
+    @State private var activityToEdit: Activity? = nil
 
     var todaySummary: (achieved: Int, total: Int) {
         dataModel.todayGoalSummary()
@@ -19,17 +19,15 @@ struct ProjectView: View {
                     if todaySummary.total > 0 {
                         todaySummaryCard
                     }
-
-                    ForEach(dataModel.categories) { category in
-                        let categoryProjects = dataModel.projects.filter { $0.categoryId == category.id }
-                        if !categoryProjects.isEmpty {
+                    ForEach(dataModel.projects) { project in
+                        let projectActivities = dataModel.activities(for: project)
+                        if !projectActivities.isEmpty {
                             VStack(alignment: .leading, spacing: 8) {
-                                Text("\(category.icon) \(category.name)")
+                                Text("\(project.icon) \(project.name)")
                                     .font(.headline)
                                     .padding(.horizontal)
-
-                                ForEach(categoryProjects) { project in
-                                    projectCard(project: project)
+                                ForEach(projectActivities) { activity in
+                                    activityCard(activity: activity)
                                 }
                             }
                         }
@@ -37,41 +35,42 @@ struct ProjectView: View {
                 }
                 .padding(.top)
             }
-            .navigationTitle("프로젝트 (\(dataModel.projects.count))")
+            .navigationTitle("\(dataModel.activities.count)개의 프로젝트 관리중")
             .toolbar {
                 ToolbarItem(placement: .automatic) {
                     Menu {
-                        Button(action: { showingAddProject = true }) {
-                            Label("프로젝트 추가", systemImage: "plus")
+                        Button(action: { showingAddActivity = true }) {
+                            Label("활동 추가", systemImage: "plus")
                         }
-                        Button(action: { showingCategoryManager = true }) {
-                            Label("카테고리 관리", systemImage: "folder.badge.gear")
+                        Button(action: { showingProjectManager = true }) {
+                            Label("프로젝트 관리", systemImage: "folder.badge.gear")
                         }
                     } label: {
                         Image(systemName: "ellipsis.circle")
                     }
                 }
             }
-            .sheet(isPresented: $showingAddProject) {
-                AddProjectView(isPresented: $showingAddProject)
+            .sheet(isPresented: $showingAddActivity) {
+                AddActivityView(isPresented: $showingAddActivity)
             }
-            .sheet(item: $projectToEdit) { project in
-                EditProjectView(project: project)
+            .sheet(item: $activityToEdit) { activity in
+                EditActivityView(activity: activity)
             }
-            .sheet(isPresented: $showingCategoryManager) {
-                CategoryManagerView()
+            .sheet(isPresented: $showingProjectManager) {
+                ProjectManagerView()
             }
-            .alert("프로젝트 삭제", isPresented: $showingDeleteAlert) {
+            .alert("활동 삭제", isPresented: $showingDeleteAlert) {
                 Button("삭제", role: .destructive) {
-                    if let project = projectToDelete,
-                       let index = dataModel.projects.firstIndex(where: { $0.id == project.id }) {
-                        dataModel.deleteProject(at: IndexSet(integer: index))
+                    if let activity = activityToDelete {
+                        dataModel.activities.removeAll { $0.id == activity.id }
+                        dataModel.records.removeAll { $0.activityId == activity.id }
+                        dataModel.saveRecords()
                     }
                 }
                 Button("취소", role: .cancel) {}
             } message: {
-                if let project = projectToDelete {
-                    Text("'\(project.name)' 프로젝트를 삭제할까요?")
+                if let activity = activityToDelete {
+                    Text("'\(activity.name)' 활동을 삭제할까요?")
                 }
             }
         }
@@ -97,16 +96,15 @@ struct ProjectView: View {
         .padding(.horizontal)
     }
 
-    func projectCard(project: Project) -> some View {
-        let streak = dataModel.streak(for: project)
-        let badge = dataModel.badge(for: project)
-        let isAchieved = dataModel.isTodayGoalAchieved(for: project)
-        let category = dataModel.category(for: project)
+    func activityCard(activity: Activity) -> some View {
+        let streak = dataModel.streak(for: activity)
+        let badge = dataModel.badge(for: activity)
+        let isAchieved = dataModel.isTodayGoalAchieved(for: activity)
 
         return HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {
-                    Text(project.name)
+                    Text(activity.name)
                         .font(.body)
                         .fontWeight(.medium)
                         .lineLimit(1)
@@ -117,15 +115,14 @@ struct ProjectView: View {
                             .font(.caption)
                     }
                 }
-
-                if project.dailyGoal > 0 {
-                    let todayTime = dataModel.todayTime(for: project)
-                    let progress = min(todayTime / project.dailyGoal, 1.0)
+                if activity.dailyGoal > 0 {
+                    let todayTime = dataModel.todayTime(for: activity)
+                    let progress = min(todayTime / activity.dailyGoal, 1.0)
                     HStack(spacing: 6) {
                         ProgressView(value: progress)
                             .frame(width: 80)
                             .tint(isAchieved ? .green : .blue)
-                        Text(timeString(from: todayTime) + " / " + timeString(from: project.dailyGoal))
+                        Text(timeString(from: todayTime) + " / " + timeString(from: activity.dailyGoal))
                             .font(.caption2)
                             .foregroundColor(isAchieved ? .green : .gray)
                     }
@@ -136,15 +133,13 @@ struct ProjectView: View {
                     }
                 }
             }
-
             Spacer()
-
             VStack(alignment: .trailing, spacing: 4) {
-                Text(timeString(from: dataModel.totalTime(for: project)))
+                Text(timeString(from: dataModel.totalTime(for: activity)))
                     .font(.caption)
                     .foregroundColor(.gray)
-                if project.dailyGoal > 0 {
-                    Text("30일 \(dataModel.achievedDays(for: project))회")
+                if activity.dailyGoal > 0 {
+                    Text("30일 \(dataModel.achievedDays(for: activity))회")
                         .font(.caption2)
                         .foregroundColor(.gray)
                 }
@@ -155,50 +150,49 @@ struct ProjectView: View {
         .cornerRadius(12)
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(isAchieved ? Color.green.opacity(0.3) : Color.clear, lineWidth: 1))
         .padding(.horizontal)
-        .onTapGesture { projectToEdit = project }
+        .onTapGesture { activityToEdit = activity }
         .onLongPressGesture {
-            projectToDelete = project
+            activityToDelete = activity
             showingDeleteAlert = true
         }
     }
 
     func timeString(from time: TimeInterval) -> String {
-        let h = Int(time) / 3600
-        let m = Int(time) / 60 % 60
-        let s = Int(time) % 60
-        return String(format: "%02d:%02d:%02d", h, m, s)
+        let totalSeconds = Int(time)
+        let days = totalSeconds / 86400
+        let hours = (totalSeconds % 86400) / 3600
+        let minutes = (totalSeconds % 3600) / 60
+        if days > 0 { return "\(days)일 \(hours)시간 \(minutes)분" }
+        if hours > 0 { return "\(hours)시간 \(minutes)분" }
+        return "\(minutes)분"
     }
 }
 
-// MARK: - 카테고리 관리
-struct CategoryManagerView: View {
+// MARK: - 프로젝트 관리
+struct ProjectManagerView: View {
     @EnvironmentObject var dataModel: DataModel
     @Environment(\.dismiss) var dismiss
-    @State private var showingAddCategory = false
-    @State private var categoryToEdit: ProjectCategory? = nil
-    @State private var categoryToDelete: ProjectCategory? = nil
+    @State private var showingAddProject = false
+    @State private var projectToEdit: Project? = nil
+    @State private var projectToDelete: Project? = nil
     @State private var showingDeleteAlert = false
 
     var body: some View {
         NavigationView {
             List {
-                ForEach(dataModel.categories) { category in
+                ForEach(dataModel.projects) { project in
                     HStack {
-                        Text(category.icon)
-                            .font(.title2)
-                        Text(category.name)
-                            .font(.body)
+                        Text(project.icon).font(.title2)
+                        Text(project.name).font(.body)
                         Spacer()
-                        let count = dataModel.projects.filter { $0.categoryId == category.id }.count
-                        Text("\(count)개")
-                            .font(.caption)
-                            .foregroundColor(.gray)
+                        let count = dataModel.activities.filter { $0.projectId == project.id }.count
+                        Text("\(count)개").font(.caption).foregroundColor(.gray)
                     }
                     .contentShape(Rectangle())
-                    .onTapGesture { categoryToEdit = category }
+                    .onTapGesture { projectToEdit = project }
                     .swipeActions(edge: .trailing) {
                         Button(role: .destructive) {
-                            categoryToDelete = category
+                            projectToDelete = project
                             showingDeleteAlert = true
                         } label: {
                             Label("삭제", systemImage: "trash")
@@ -206,10 +200,10 @@ struct CategoryManagerView: View {
                     }
                 }
             }
-            .navigationTitle("카테고리 관리")
+            .navigationTitle("프로젝트 관리")
             .toolbar {
                 ToolbarItem(placement: .automatic) {
-                    Button(action: { showingAddCategory = true }) {
+                    Button(action: { showingAddProject = true }) {
                         Image(systemName: "plus")
                     }
                 }
@@ -217,121 +211,22 @@ struct CategoryManagerView: View {
                     Button("닫기") { dismiss() }
                 }
             }
-            .sheet(isPresented: $showingAddCategory) {
-                AddCategoryView(isPresented: $showingAddCategory)
+            .sheet(isPresented: $showingAddProject) {
+                AddProjectView(isPresented: $showingAddProject)
             }
-            .sheet(item: $categoryToEdit) { category in
-                EditCategoryView(category: category)
+            .sheet(item: $projectToEdit) { project in
+                EditProjectView(project: project)
             }
-            .alert("카테고리 삭제", isPresented: $showingDeleteAlert) {
+            .alert("프로젝트 삭제", isPresented: $showingDeleteAlert) {
                 Button("삭제", role: .destructive) {
-                    if let cat = categoryToDelete {
-                        dataModel.deleteCategory(cat)
+                    if let project = projectToDelete {
+                        dataModel.deleteProject(project)
                     }
                 }
                 Button("취소", role: .cancel) {}
             } message: {
-                if let cat = categoryToDelete {
-                    Text("'\(cat.name)' 카테고리를 삭제할까요?\n해당 카테고리의 프로젝트는 유지됩니다.")
-                }
-            }
-        }
-    }
-}
-
-// MARK: - 카테고리 추가
-struct AddCategoryView: View {
-    @EnvironmentObject var dataModel: DataModel
-    @Binding var isPresented: Bool
-    @State private var name = ""
-    @State private var icon = ""
-
-    let suggestedIcons = ["🎮","📚","💬","🎬","💪","💼","📌","🎵","🍳","✈️","🎨","📷","🏃","💰","🧘","📝","🎯","🛒","🐾","🌱"]
-
-    var body: some View {
-        NavigationView {
-            Form {
-                Section(header: Text("카테고리 이름")) {
-                    TextField("예) 독서, 요리, 여행", text: $name)
-                }
-                Section(header: Text("아이콘")) {
-                    TextField("이모지 입력", text: $icon)
-                        .font(.title2)
-
-                    LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 5), spacing: 12) {
-                        ForEach(suggestedIcons, id: \.self) { emoji in
-                            Text(emoji)
-                                .font(.title2)
-                                .frame(width: 44, height: 44)
-                                .background(icon == emoji ? Color.blue.opacity(0.2) : Color.gray.opacity(0.1))
-                                .cornerRadius(8)
-                                .onTapGesture { icon = emoji }
-                        }
-                    }
-                    .padding(.vertical, 4)
-                }
-            }
-            .navigationTitle("카테고리 추가")
-            .toolbar {
-                ToolbarItem(placement: .automatic) {
-                    Button("추가") {
-                        if !name.isEmpty {
-                            dataModel.addCategory(name: name, icon: icon.isEmpty ? "📌" : icon)
-                            isPresented = false
-                        }
-                    }
-                    .disabled(name.isEmpty)
-                }
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("취소") { isPresented = false }
-                }
-            }
-        }
-    }
-}
-
-// MARK: - 카테고리 수정
-struct EditCategoryView: View {
-    @EnvironmentObject var dataModel: DataModel
-    @Environment(\.dismiss) var dismiss
-    @State var category: ProjectCategory
-
-    let suggestedIcons = ["🎮","📚","💬","🎬","💪","💼","📌","🎵","🍳","✈️","🎨","📷","🏃","💰","🧘","📝","🎯","🛒","🐾","🌱"]
-
-    var body: some View {
-        NavigationView {
-            Form {
-                Section(header: Text("카테고리 이름")) {
-                    TextField("이름", text: $category.name)
-                }
-                Section(header: Text("아이콘")) {
-                    TextField("이모지 입력", text: $category.icon)
-                        .font(.title2)
-
-                    LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 5), spacing: 12) {
-                        ForEach(suggestedIcons, id: \.self) { emoji in
-                            Text(emoji)
-                                .font(.title2)
-                                .frame(width: 44, height: 44)
-                                .background(category.icon == emoji ? Color.blue.opacity(0.2) : Color.gray.opacity(0.1))
-                                .cornerRadius(8)
-                                .onTapGesture { category.icon = emoji }
-                        }
-                    }
-                    .padding(.vertical, 4)
-                }
-            }
-            .navigationTitle("카테고리 수정")
-            .toolbar {
-                ToolbarItem(placement: .automatic) {
-                    Button("저장") {
-                        dataModel.updateCategory(category)
-                        dismiss()
-                    }
-                    .disabled(category.name.isEmpty)
-                }
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("취소") { dismiss() }
+                if let project = projectToDelete {
+                    Text("'\(project.name)' 프로젝트를 삭제할까요?\n관련 활동과 기록도 모두 삭제됩니다.")
                 }
             }
         }
@@ -343,60 +238,40 @@ struct AddProjectView: View {
     @EnvironmentObject var dataModel: DataModel
     @Binding var isPresented: Bool
     @State private var name = ""
-    @State private var selectedCategoryId: UUID? = nil
-    @State private var dailyGoalHours: Int = 0
-    @State private var dailyGoalMinutes: Int = 0
+    @State private var icon = "📌"
+
+    let suggestedIcons = ["🎮","📚","💬","🎬","💪","💼","📌","🎵","🍳","✈️","🎨","📷","🏃","💰","🧘","📝","🎯","🛒","🐾","🌱"]
 
     var body: some View {
         NavigationView {
             Form {
-                Section(header: Text("앱 이름")) {
-                    TextField("예) 카카오톡, 유튜브", text: $name)
+                Section(header: Text("프로젝트 이름")) {
+                    TextField("예) 자기계발, 취미, 업무", text: $name)
                 }
-                Section(header: Text("카테고리")) {
-                    ForEach(dataModel.categories) { cat in
-                        HStack {
-                            Text("\(cat.icon) \(cat.name)")
-                            Spacer()
-                            if selectedCategoryId == cat.id {
-                                Image(systemName: "checkmark").foregroundColor(.blue)
-                            }
+                Section(header: Text("아이콘")) {
+                    TextField("이모지 입력", text: $icon).font(.title2)
+                    LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 5), spacing: 12) {
+                        ForEach(suggestedIcons, id: \.self) { emoji in
+                            Text(emoji).font(.title2)
+                                .frame(width: 44, height: 44)
+                                .background(icon == emoji ? Color.blue.opacity(0.2) : Color.gray.opacity(0.1))
+                                .cornerRadius(8)
+                                .onTapGesture { icon = emoji }
                         }
-                        .contentShape(Rectangle())
-                        .onTapGesture { selectedCategoryId = cat.id }
                     }
-                }
-                Section(header: Text("하루 목표 시간 (선택)")) {
-                    HStack {
-                        Picker("시간", selection: $dailyGoalHours) {
-                            ForEach(0..<24) { Text("\($0)시간").tag($0) }
-                        }
-                        .pickerStyle(.wheel)
-                        .frame(width: 120)
-                        Picker("분", selection: $dailyGoalMinutes) {
-                            ForEach([0, 10, 20, 30, 40, 50], id: \.self) { Text("\($0)분").tag($0) }
-                        }
-                        .pickerStyle(.wheel)
-                        .frame(width: 120)
-                    }
+                    .padding(.vertical, 4)
                 }
             }
-            .navigationTitle("새 프로젝트")
-            .onAppear {
-                if selectedCategoryId == nil {
-                    selectedCategoryId = dataModel.categories.first?.id
-                }
-            }
+            .navigationTitle("프로젝트 추가")
             .toolbar {
                 ToolbarItem(placement: .automatic) {
                     Button("추가") {
-                        if !name.isEmpty, let catId = selectedCategoryId {
-                            let goal = TimeInterval(dailyGoalHours * 3600 + dailyGoalMinutes * 60)
-                            dataModel.addProject(name: name, categoryId: catId, dailyGoal: goal)
+                        if !name.isEmpty {
+                            dataModel.addProject(name: name, icon: icon)
                             isPresented = false
                         }
                     }
-                    .disabled(name.isEmpty || selectedCategoryId == nil)
+                    .disabled(name.isEmpty)
                 }
                 ToolbarItem(placement: .cancellationAction) {
                     Button("취소") { isPresented = false }
@@ -411,12 +286,145 @@ struct EditProjectView: View {
     @EnvironmentObject var dataModel: DataModel
     @Environment(\.dismiss) var dismiss
     @State var project: Project
+
+    let suggestedIcons = ["🎮","📚","💬","🎬","💪","💼","📌","🎵","🍳","✈️","🎨","📷","🏃","💰","🧘","📝","🎯","🛒","🐾","🌱"]
+
+    var body: some View {
+        NavigationView {
+            Form {
+                Section(header: Text("프로젝트 이름")) {
+                    TextField("이름", text: $project.name)
+                }
+                Section(header: Text("아이콘")) {
+                    TextField("이모지 입력", text: $project.icon).font(.title2)
+                    LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 5), spacing: 12) {
+                        ForEach(suggestedIcons, id: \.self) { emoji in
+                            Text(emoji).font(.title2)
+                                .frame(width: 44, height: 44)
+                                .background(project.icon == emoji ? Color.blue.opacity(0.2) : Color.gray.opacity(0.1))
+                                .cornerRadius(8)
+                                .onTapGesture { project.icon = emoji }
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+            }
+            .navigationTitle("프로젝트 수정")
+            .toolbar {
+                ToolbarItem(placement: .automatic) {
+                    Button("저장") {
+                        dataModel.updateProject(project)
+                        dismiss()
+                    }
+                    .disabled(project.name.isEmpty)
+                }
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("취소") { dismiss() }
+                }
+            }
+        }
+    }
+}
+
+// MARK: - 활동 추가 (2단계: 프로젝트 선택 → 활동 입력)
+struct AddActivityView: View {
+    @EnvironmentObject var dataModel: DataModel
+    @Binding var isPresented: Bool
+    @State private var selectedProject: Project? = nil
+    @State private var name = ""
+    @State private var dailyGoalHours: Int = 0
+    @State private var dailyGoalMinutes: Int = 0
+    @State private var step = 1  // 1: 프로젝트 선택, 2: 활동 입력
+
+    var body: some View {
+        NavigationView {
+            if step == 1 {
+                projectSelectionView
+            } else {
+                activityInputView
+            }
+        }
+    }
+
+    var projectSelectionView: some View {
+        List {
+            ForEach(dataModel.projects) { project in
+                HStack {
+                    Text(project.icon).font(.title2)
+                    Text(project.name).font(.body)
+                    Spacer()
+                    Image(systemName: "chevron.right").foregroundColor(.gray).font(.caption)
+                }
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    selectedProject = project
+                    step = 2
+                }
+            }
+        }
+        .navigationTitle("프로젝트 선택")
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("취소") { isPresented = false }
+            }
+        }
+    }
+
+    var activityInputView: some View {
+        Form {
+            Section(header: Text("프로젝트")) {
+                HStack {
+                    Text(selectedProject?.icon ?? "📌")
+                    Text(selectedProject?.name ?? "")
+                        .foregroundColor(.blue)
+                }
+            }
+            Section(header: Text("활동 이름")) {
+                TextField("예) 영어 단어, 유튜브, 헬스", text: $name)
+            }
+            Section(header: Text("하루 목표 시간 (선택)")) {
+                HStack {
+                    Picker("시간", selection: $dailyGoalHours) {
+                        ForEach(0..<24) { Text("\($0)시간").tag($0) }
+                    }
+                    .pickerStyle(.wheel).frame(width: 120)
+                    Picker("분", selection: $dailyGoalMinutes) {
+                        ForEach([0, 10, 20, 30, 40, 50], id: \.self) { Text("\($0)분").tag($0) }
+                    }
+                    .pickerStyle(.wheel).frame(width: 120)
+                }
+            }
+        }
+        .navigationTitle("활동 추가")
+        .toolbar {
+            ToolbarItem(placement: .automatic) {
+                Button("추가") {
+                    if !name.isEmpty, let project = selectedProject {
+                        let goal = TimeInterval(dailyGoalHours * 3600 + dailyGoalMinutes * 60)
+                        dataModel.addActivity(name: name, projectId: project.id, dailyGoal: goal)
+                        isPresented = false
+                    }
+                }
+                .disabled(name.isEmpty)
+            }
+            ToolbarItem(placement: .cancellationAction) {
+                Button("뒤로") { step = 1 }
+            }
+        }
+    }
+}
+
+// MARK: - 활동 수정
+struct EditActivityView: View {
+    @EnvironmentObject var dataModel: DataModel
+    @Environment(\.dismiss) var dismiss
+    @State var activity: Activity
     @State private var dailyGoalHours: Int = 0
     @State private var dailyGoalMinutes: Int = 0
 
-    init(project: Project) {
-        _project = State(initialValue: project)
-        let totalSeconds = Int(project.dailyGoal)
+    init(activity: Activity) {
+        _activity = State(initialValue: activity)
+        let totalSeconds = Int(activity.dailyGoal)
         _dailyGoalHours = State(initialValue: totalSeconds / 3600)
         _dailyGoalMinutes = State(initialValue: (totalSeconds % 3600) / 60)
     }
@@ -424,20 +432,20 @@ struct EditProjectView: View {
     var body: some View {
         NavigationView {
             Form {
-                Section(header: Text("앱 이름")) {
-                    TextField("이름", text: $project.name)
+                Section(header: Text("활동 이름")) {
+                    TextField("이름", text: $activity.name)
                 }
-                Section(header: Text("카테고리")) {
-                    ForEach(dataModel.categories) { cat in
+                Section(header: Text("프로젝트")) {
+                    ForEach(dataModel.projects) { project in
                         HStack {
-                            Text("\(cat.icon) \(cat.name)")
+                            Text("\(project.icon) \(project.name)")
                             Spacer()
-                            if project.categoryId == cat.id {
+                            if activity.projectId == project.id {
                                 Image(systemName: "checkmark").foregroundColor(.blue)
                             }
                         }
                         .contentShape(Rectangle())
-                        .onTapGesture { project.categoryId = cat.id }
+                        .onTapGesture { activity.projectId = project.id }
                     }
                 }
                 Section(header: Text("하루 목표 시간")) {
@@ -445,22 +453,20 @@ struct EditProjectView: View {
                         Picker("시간", selection: $dailyGoalHours) {
                             ForEach(0..<24) { Text("\($0)시간").tag($0) }
                         }
-                        .pickerStyle(.wheel)
-                        .frame(width: 120)
+                        .pickerStyle(.wheel).frame(width: 120)
                         Picker("분", selection: $dailyGoalMinutes) {
                             ForEach([0, 10, 20, 30, 40, 50], id: \.self) { Text("\($0)분").tag($0) }
                         }
-                        .pickerStyle(.wheel)
-                        .frame(width: 120)
+                        .pickerStyle(.wheel).frame(width: 120)
                     }
                 }
             }
-            .navigationTitle("프로젝트 수정")
+            .navigationTitle("활동 수정")
             .toolbar {
                 ToolbarItem(placement: .automatic) {
                     Button("저장") {
-                        project.dailyGoal = TimeInterval(dailyGoalHours * 3600 + dailyGoalMinutes * 60)
-                        dataModel.updateProject(project)
+                        activity.dailyGoal = TimeInterval(dailyGoalHours * 3600 + dailyGoalMinutes * 60)
+                        dataModel.updateActivity(activity)
                         dismiss()
                     }
                 }
@@ -473,6 +479,5 @@ struct EditProjectView: View {
 }
 
 #Preview {
-    ProjectView()
-        .environmentObject(DataModel())
+    ProjectView().environmentObject(DataModel())
 }
