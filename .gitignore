@@ -1,0 +1,12 @@
+# 환경변수
+.env
+.env.local
+.env.production
+.env.*
+
+# Xcode
+*.xcuserstate
+xcuserdata/
+DerivedData/
+.DS_Store
+.build/
