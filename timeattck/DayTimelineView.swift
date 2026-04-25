@@ -12,6 +12,9 @@ struct DayTimelineView: View {
     @State private var showingAddRecord = false
     @State private var addRecordStartDate: Date = Date()
     @State private var showingRecurringRecord = false
+    @State private var showCalendar = false
+    @State private var selectedRecord: TimeRecord? = nil
+    @State private var showingRecordActions = false
 
     let hourHeight: CGFloat = 64
     let timeColumnWidth: CGFloat = 48
@@ -57,17 +60,26 @@ struct DayTimelineView: View {
                 Divider()
                 timelineScrollView
             }
+            .onAppear { selectedDate = Calendar.current.startOfDay(for: Date()) }
             .navigationTitle("타임라인")
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button(action: { showingRecurringRecord = true }) {
-                        Image(systemName: "repeat.circle")
+                        VStack(spacing: 2) {
+                            Image(systemName: "repeat.circle")
+                            Text("반복기록").font(.system(size: 9))
+                        }
                     }
                 }
             }
             .sheet(item: $recordToEdit) { record in EditRecordView(record: record) }
             .sheet(isPresented: $showingAddRecord) { AddRecordView(startDate: addRecordStartDate, selectedDate: selectedDate) }
             .sheet(isPresented: $showingRecurringRecord) { RecurringRecordView() }
+            .confirmationDialog("기록 옵션", isPresented: $showingRecordActions, titleVisibility: .hidden) {
+                Button("수정") { recordToEdit = selectedRecord; selectedRecord = nil }
+                Button("삭제", role: .destructive) { recordToDelete = selectedRecord; selectedRecord = nil; showingDeleteAlert = true }
+                Button("취소", role: .cancel) { selectedRecord = nil }
+            }
             .alert("기록 삭제", isPresented: $showingDeleteAlert) {
                 Button("삭제", role: .destructive) { if let record = recordToDelete { modelContext.delete(record) } }
                 Button("취소", role: .cancel) {}
@@ -76,32 +88,62 @@ struct DayTimelineView: View {
     }
 
     var datePicker: some View {
-        ScrollViewReader { proxy in
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 6) {
-                    ForEach(recentDates, id: \.self) { date in
-                        let isSelected = Calendar.current.isDate(date, inSameDayAs: selectedDate)
-                        let isToday = Calendar.current.isDateInToday(date)
-                        VStack(spacing: 2) {
-                            Text(dayOfWeek(from: date)).font(.caption2).foregroundColor(isSelected ? .white : .gray)
-                            Text(dayNumber(from: date)).font(.system(size: 15, weight: isSelected ? .bold : .regular))
-                                .foregroundColor(isSelected ? .white : isToday ? .blue : .primary)
+        VStack(spacing: 0) {
+            ScrollViewReader { proxy in
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        ForEach(recentDates, id: \.self) { date in
+                            let isSelected = Calendar.current.isDate(date, inSameDayAs: selectedDate)
+                            let isToday = Calendar.current.isDateInToday(date)
+                            VStack(spacing: 2) {
+                                Text(dayOfWeek(from: date)).font(.caption2).foregroundColor(isSelected ? .white : .gray)
+                                Text(dayNumber(from: date)).font(.system(size: 15, weight: isSelected ? .bold : .regular))
+                                    .foregroundColor(isSelected ? .white : isToday ? .blue : .primary)
+                            }
+                            .frame(width: 38, height: 52)
+                            .background(isSelected ? Color.blue : (isToday ? Color.blue.opacity(0.1) : Color.clear))
+                            .cornerRadius(10).id(date)
+                            .onTapGesture { withAnimation { selectedDate = date } }
                         }
-                        .frame(width: 38, height: 52)
-                        .background(isSelected ? Color.blue : (isToday ? Color.blue.opacity(0.1) : Color.clear))
-                        .cornerRadius(10).id(date)
-                        .onTapGesture { withAnimation { selectedDate = date } }
+                    }
+                    .padding(.horizontal, 12)
+                }
+                .padding(.vertical, 8)
+                .onAppear {
+                    let today = Calendar.current.startOfDay(for: Date())
+                    proxy.scrollTo(today, anchor: .center)
+                }
+                .onChange(of: selectedDate) { _, newDate in withAnimation { proxy.scrollTo(newDate, anchor: .center) } }
+            }
+
+            // 달력 토글 핸들
+            Button(action: { withAnimation(.easeInOut(duration: 0.25)) { showCalendar.toggle() } }) {
+                Image(systemName: showCalendar ? "chevron.up" : "chevron.down")
+                    .font(.caption2)
+                    .foregroundColor(.gray)
+                    .frame(maxWidth: .infinity)
+                    .padding(.bottom, 4)
+            }
+
+            if showCalendar {
+                DatePicker("", selection: $selectedDate, in: ...recentDates.last!, displayedComponents: .date)
+                    .datePickerStyle(.graphical)
+                    .padding(.horizontal, 8)
+                    .environment(\.locale, Locale(identifier: "ko_KR"))
+                    .onChange(of: selectedDate) { _, _ in
+                        withAnimation(.easeInOut(duration: 0.25)) { showCalendar = false }
+                    }
+            }
+        }
+        .gesture(
+            DragGesture(minimumDistance: 20)
+                .onEnded { v in
+                    withAnimation(.easeInOut(duration: 0.25)) {
+                        if v.translation.height > 20 { showCalendar = true }
+                        else if v.translation.height < -20 { showCalendar = false }
                     }
                 }
-                .padding(.horizontal, 12)
-            }
-            .padding(.vertical, 8)
-            .onAppear {
-                let today = Calendar.current.startOfDay(for: Date())
-                proxy.scrollTo(today, anchor: .center)
-            }
-            .onChange(of: selectedDate) { _, newDate in withAnimation { proxy.scrollTo(newDate, anchor: .center) } }
-        }
+        )
     }
 
     var summaryBar: some View {
@@ -109,7 +151,6 @@ struct DayTimelineView: View {
             Text("총 \(timeString(from: totalTime))").font(.subheadline).fontWeight(.medium)
             Spacer()
             Text("길게 눌러 기록 추가").font(.caption2).foregroundColor(.gray)
-            Text("\(dayRecords.count)개 기록").font(.caption).foregroundColor(.gray)
         }
         .padding(.horizontal, 16).padding(.vertical, 8).background(Color.blue.opacity(0.05))
     }
@@ -169,10 +210,11 @@ struct DayTimelineView: View {
                 let colWidth = (blockWidth - 8) / CGFloat(columnInfo.total)
                 let xOffset = timeColumnWidth + 8 + colWidth * CGFloat(columnInfo.column)
 
+                let isSelected = selectedRecord?.id == record.id
                 ZStack(alignment: .topLeading) {
                     RoundedRectangle(cornerRadius: 6)
-                        .fill(projectColor(for: project).opacity(0.2))
-                        .overlay(RoundedRectangle(cornerRadius: 6).stroke(projectColor(for: project), lineWidth: 1.5))
+                        .fill(projectColor(for: project).opacity(isSelected ? 0.45 : 0.2))
+                        .overlay(RoundedRectangle(cornerRadius: 6).stroke(projectColor(for: project), lineWidth: isSelected ? 2.5 : 1.5))
                     VStack(alignment: .leading, spacing: 2) {
                         HStack(spacing: 4) {
                             Text(project?.icon ?? "📌").font(.system(size: 10))
@@ -188,33 +230,48 @@ struct DayTimelineView: View {
                 .frame(width: colWidth - 2, height: blockHeight)
                 .offset(x: xOffset, y: yOffset)
                 .onTapGesture { recordToEdit = record }
-                .contextMenu {
-                    Button(action: { recordToEdit = record }) { Label("수정", systemImage: "pencil") }
-                    Button(role: .destructive, action: { recordToDelete = record; showingDeleteAlert = true }) {
-                        Label("삭제", systemImage: "trash")
-                    }
+                .onLongPressGesture(minimumDuration: 0.4) {
+                    selectedRecord = record
+                    showingRecordActions = true
                 }
             }
         }
     }
 
     func layoutColumns(for segments: [(record: TimeRecord, displayDate: Date, displayDuration: TimeInterval)]) -> [(column: Int, total: Int)] {
-        var result = Array(repeating: (column: 0, total: 1), count: segments.count)
-        for i in 0..<segments.count {
-            var overlapping = [i]
-            let startI = segments[i].displayDate
-            let endI = startI.addingTimeInterval(segments[i].displayDuration)
-            for j in 0..<segments.count where i != j {
-                let startJ = segments[j].displayDate
-                let endJ = startJ.addingTimeInterval(segments[j].displayDuration)
-                if startI < endJ && endI > startJ {
-                    overlapping.append(j)
+        let maxCols = 5
+        let n = segments.count
+        guard n > 0 else { return [] }
+
+        // 실제 렌더 위치 기준으로 시각적 겹침 판단 (최소 높이 28px 반영)
+        let tops: [CGFloat] = segments.map { yPosition(for: $0.displayDate) }
+        let bottoms: [CGFloat] = segments.enumerated().map { i, seg in
+            tops[i] + max(heightForDuration(seg.displayDuration), 28)
+        }
+
+        // 그리디: 시각적으로 빈 열 중 가장 작은 번호 할당
+        var assignedCols = [Int](repeating: 0, count: n)
+        var colBottoms = [CGFloat](repeating: -1, count: maxCols)
+
+        for i in 0..<n {
+            var col = maxCols - 1
+            for c in 0..<maxCols {
+                if colBottoms[c] <= tops[i] { col = c; break }
+            }
+            assignedCols[i] = col
+            colBottoms[col] = max(colBottoms[col], bottoms[i])
+        }
+
+        // 시각적으로 겹치는 그룹의 최대 열 번호로 total 계산
+        var result = Array(repeating: (column: 0, total: 1), count: n)
+        for i in 0..<n {
+            var maxCol = assignedCols[i]
+            for j in 0..<n {
+                if tops[i] < bottoms[j] && bottoms[i] > tops[j] {
+                    maxCol = max(maxCol, assignedCols[j])
                 }
             }
-            let total = overlapping.count
-            for (col, idx) in overlapping.sorted().enumerated() {
-                result[idx] = (column: col, total: total)
-            }
+            result[i] = (column: assignedCols[i], total: min(maxCol + 1, maxCols))
         }
         return result
     }
@@ -259,39 +316,20 @@ struct AddRecordView: View {
     @Environment(\.dismiss) var dismiss
     @Query(sort: \Project.sortOrder) var projects: [Project]
     @Query(sort: \TimeRecord.date) var allRecords: [TimeRecord]
-    @State private var recordDate: Date
-    @State private var startTime: Date
-    @State private var endTime: Date
+    @State private var startDateTime: Date
+    @State private var endDateTime: Date
     @State private var selectedProject: Project? = nil
     @State private var selectedActivity: Activity? = nil
     @State private var step = 1
     @State private var showingOverlapAlert = false
 
     init(startDate: Date, selectedDate: Date) {
-        _recordDate = State(initialValue: Calendar.current.startOfDay(for: selectedDate))
-        _startTime = State(initialValue: startDate)
-        _endTime = State(initialValue: startDate.addingTimeInterval(3600))
+        let start = startDate
+        _startDateTime = State(initialValue: start)
+        _endDateTime = State(initialValue: start.addingTimeInterval(3600))
     }
 
-    var startDateTime: Date { combineDateAndTime(date: recordDate, time: startTime) }
-    var endDateTime: Date {
-        let result = combineDateAndTime(date: recordDate, time: endTime)
-        return result <= startDateTime ? Calendar.current.date(byAdding: .day, value: 1, to: result)! : result
-    }
-
-    func combineDateAndTime(date: Date, time: Date) -> Date {
-        let cal = Calendar.current
-        var dc = cal.dateComponents([.year, .month, .day], from: date)
-        let tc = cal.dateComponents([.hour, .minute], from: time)
-        dc.hour = tc.hour; dc.minute = tc.minute; dc.second = 0
-        return cal.date(from: dc) ?? time
-    }
-
-    var dayRecords: [TimeRecord] {
-        let start = Calendar.current.startOfDay(for: recordDate)
-        let end = Calendar.current.date(byAdding: .day, value: 1, to: start)!
-        return allRecords.filter { $0.date >= start && $0.date < end }
-    }
+    var duration: TimeInterval { max(endDateTime.timeIntervalSince(startDateTime), 0) }
 
     func hasOverlap(start: Date, end: Date) -> Bool {
         allRecords.contains {
@@ -302,11 +340,7 @@ struct AddRecordView: View {
 
     var body: some View {
         NavigationView {
-            if step == 1 {
-                projectSelectionView
-            } else {
-                activityAndTimeView
-            }
+            if step == 1 { projectSelectionView } else { activityAndTimeView }
         }
     }
 
@@ -323,10 +357,7 @@ struct AddRecordView: View {
                         Image(systemName: "chevron.right").foregroundColor(.gray).font(.caption)
                     }
                     .contentShape(Rectangle())
-                    .onTapGesture {
-                        selectedProject = project
-                        step = 2
-                    }
+                    .onTapGesture { selectedProject = project; step = 2 }
                 }
             }
         }
@@ -361,21 +392,20 @@ struct AddRecordView: View {
                     }
                 }
             }
-            Section(header: Text("날짜")) {
-                DatePicker("날짜", selection: $recordDate, displayedComponents: .date)
-                    .labelsHidden()
+            Section(header: Text("시작")) {
+                DatePicker("날짜", selection: $startDateTime, displayedComponents: .date)
+                    .environment(\.locale, Locale(identifier: "ko_KR"))
+                DatePicker("시간", selection: $startDateTime, displayedComponents: .hourAndMinute)
             }
-            Section(header: Text("시작 시간")) {
-                DatePicker("시작", selection: $startTime, displayedComponents: .hourAndMinute).labelsHidden()
-            }
-            Section(header: Text("종료 시간")) {
-                DatePicker("종료", selection: $endTime, displayedComponents: .hourAndMinute).labelsHidden()
+            Section(header: Text("종료")) {
+                DatePicker("날짜", selection: $endDateTime, displayedComponents: .date)
+                    .environment(\.locale, Locale(identifier: "ko_KR"))
+                DatePicker("시간", selection: $endDateTime, displayedComponents: .hourAndMinute)
             }
             Section {
                 HStack {
                     Text("총 시간")
                     Spacer()
-                    let duration = max(endDateTime.timeIntervalSince(startDateTime), 0)
                     Text(timeString(from: duration)).foregroundColor(.blue).fontWeight(.medium)
                 }
             }
@@ -384,19 +414,15 @@ struct AddRecordView: View {
         .toolbar {
             ToolbarItem(placement: .automatic) {
                 Button("추가") {
-                    guard let activity = selectedActivity else { return }
-                    let start = startDateTime
-                    let end = endDateTime
-                    let duration = max(end.timeIntervalSince(start), 0)
-                    guard duration > 0 else { return }
-                    if hasOverlap(start: start, end: end) {
+                    guard let activity = selectedActivity, duration > 0 else { return }
+                    if hasOverlap(start: startDateTime, end: endDateTime) {
                         showingOverlapAlert = true
                     } else {
-                        modelContext.insert(TimeRecord(activity: activity, duration: duration, date: start))
+                        modelContext.insert(TimeRecord(activity: activity, duration: duration, date: startDateTime))
                         dismiss()
                     }
                 }
-                .disabled(selectedActivity == nil || endDateTime <= startDateTime)
+                .disabled(selectedActivity == nil || duration <= 0)
             }
             ToolbarItem(placement: .cancellationAction) { Button("취소") { dismiss() } }
         }
@@ -421,21 +447,20 @@ struct EditRecordView: View {
     @Environment(\.dismiss) var dismiss
     @Query(sort: \TimeRecord.date) var allRecords: [TimeRecord]
     let record: TimeRecord
-    @State private var startDate: Date
-    @State private var endDate: Date
+    @State private var startDateTime: Date
+    @State private var endDateTime: Date
     @State private var showingOverlapAlert = false
 
     init(record: TimeRecord) {
         self.record = record
-        _startDate = State(initialValue: record.date)
-        _endDate = State(initialValue: record.date.addingTimeInterval(record.duration))
+        _startDateTime = State(initialValue: record.date)
+        _endDateTime = State(initialValue: record.date.addingTimeInterval(record.duration))
     }
 
+    var duration: TimeInterval { max(endDateTime.timeIntervalSince(startDateTime), 0) }
+
     func hasOverlap(start: Date, end: Date) -> Bool {
-        let dayStart = Calendar.current.startOfDay(for: record.date)
-        let dayEnd = Calendar.current.date(byAdding: .day, value: 1, to: dayStart)!
-        let dayRecords = allRecords.filter { $0.date >= dayStart && $0.date < dayEnd && $0.id != record.id }
-        return dayRecords.contains {
+        allRecords.filter { $0.id != record.id }.contains {
             let recEnd = $0.date.addingTimeInterval($0.duration)
             return start < recEnd && end > $0.date
         }
@@ -450,17 +475,20 @@ struct EditRecordView: View {
                         Text(record.activity?.name ?? "알 수 없음")
                     }
                 }
-                Section(header: Text("시작 시간")) {
-                    DatePicker("시작", selection: $startDate, displayedComponents: [.hourAndMinute]).labelsHidden()
+                Section(header: Text("시작")) {
+                    DatePicker("날짜", selection: $startDateTime, displayedComponents: .date)
+                        .environment(\.locale, Locale(identifier: "ko_KR"))
+                    DatePicker("시간", selection: $startDateTime, displayedComponents: .hourAndMinute)
                 }
-                Section(header: Text("종료 시간")) {
-                    DatePicker("종료", selection: $endDate, displayedComponents: [.hourAndMinute]).labelsHidden()
+                Section(header: Text("종료")) {
+                    DatePicker("날짜", selection: $endDateTime, displayedComponents: .date)
+                        .environment(\.locale, Locale(identifier: "ko_KR"))
+                    DatePicker("시간", selection: $endDateTime, displayedComponents: .hourAndMinute)
                 }
                 Section {
                     HStack {
                         Text("총 시간")
                         Spacer()
-                        let duration = max(endDate.timeIntervalSince(startDate), 0)
                         Text(timeString(from: duration)).foregroundColor(.blue).fontWeight(.medium)
                     }
                 }
@@ -469,17 +497,16 @@ struct EditRecordView: View {
             .toolbar {
                 ToolbarItem(placement: .automatic) {
                     Button("저장") {
-                        let duration = max(endDate.timeIntervalSince(startDate), 0)
                         guard duration > 0 else { return }
-                        if hasOverlap(start: startDate, end: endDate) {
+                        if hasOverlap(start: startDateTime, end: endDateTime) {
                             showingOverlapAlert = true
                         } else {
-                            record.date = startDate
+                            record.date = startDateTime
                             record.duration = duration
                             dismiss()
                         }
                     }
-                    .disabled(endDate <= startDate)
+                    .disabled(duration <= 0)
                 }
                 ToolbarItem(placement: .cancellationAction) { Button("취소") { dismiss() } }
             }

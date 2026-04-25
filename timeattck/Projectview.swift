@@ -21,24 +21,22 @@ struct ProjectView: View {
     var body: some View {
         NavigationView {
             ScrollView {
-                VStack(spacing: 16) {
+                VStack(spacing: 12) {
                     if todaySummary.total > 0 {
                         todaySummaryCard
                     }
                     ForEach(projects) { project in
                         let projectActivities = project.sortedActivities
                         if !projectActivities.isEmpty {
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text("\(project.icon) \(project.name)")
-                                    .font(.headline)
-                                    .padding(.horizontal)
-                                if isReordering {
+                            if isReordering {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text("\(project.icon) \(project.name)")
+                                        .font(.headline)
+                                        .padding(.horizontal)
                                     ReorderableActivityList(project: project)
-                                } else {
-                                    ForEach(projectActivities) { activity in
-                                        activityCard(activity: activity)
-                                    }
                                 }
+                            } else {
+                                projectCard(project: project, activities: projectActivities)
                             }
                         }
                     }
@@ -107,14 +105,47 @@ struct ProjectView: View {
         .padding(.horizontal)
     }
 
-    func activityCard(activity: Activity) -> some View {
+    func projectCard(project: Project, activities: [Activity]) -> some View {
+        HStack(alignment: .top, spacing: 0) {
+            VStack(spacing: 6) {
+                Text(project.icon).font(.title2)
+                Text(project.name)
+                    .font(.caption)
+                    .foregroundColor(.gray)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+            }
+            .frame(width: 72)
+            .frame(maxHeight: .infinity)
+            .padding(.vertical, 14)
+
+            Rectangle()
+                .fill(Color.gray.opacity(0.2))
+                .frame(width: 1)
+
+            VStack(spacing: 0) {
+                ForEach(Array(activities.enumerated()), id: \.element.id) { index, activity in
+                    activityRow(activity: activity)
+                    if index < activities.count - 1 {
+                        Divider().padding(.leading, 12)
+                    }
+                }
+            }
+        }
+        .background(Color.gray.opacity(0.08))
+        .cornerRadius(12)
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.gray.opacity(0.15), lineWidth: 1))
+        .padding(.horizontal)
+    }
+
+    func activityRow(activity: Activity) -> some View {
+        let isAchieved = activity.isTodayGoalAchieved
         let streak = activity.streak
         let badge = activity.badge
-        let isAchieved = activity.isTodayGoalAchieved
 
-        return HStack(spacing: 12) {
+        return HStack {
             VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 6) {
+                HStack(spacing: 5) {
                     Text(activity.name)
                         .font(.body)
                         .fontWeight(.medium)
@@ -131,7 +162,6 @@ struct ProjectView: View {
                     let progress = min(todayTime / activity.dailyGoal, 1.0)
                     HStack(spacing: 6) {
                         ProgressView(value: progress)
-                            .frame(width: 80)
                             .tint(isAchieved ? .green : .blue)
                         Text(timeString(from: todayTime) + " / " + timeString(from: activity.dailyGoal))
                             .font(.caption2)
@@ -145,22 +175,11 @@ struct ProjectView: View {
                 }
             }
             Spacer()
-            VStack(alignment: .trailing, spacing: 4) {
-                Text(timeString(from: activity.totalTime))
-                    .font(.caption)
-                    .foregroundColor(.gray)
-                if activity.dailyGoal > 0 {
-                    Text("30일 \(activity.achievedDays())회")
-                        .font(.caption2)
-                        .foregroundColor(.gray)
-                }
-            }
         }
-        .padding()
-        .background(isAchieved ? Color.green.opacity(0.08) : Color.gray.opacity(0.08))
-        .cornerRadius(12)
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(isAchieved ? Color.green.opacity(0.3) : Color.clear, lineWidth: 1))
-        .padding(.horizontal)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 11)
+        .background(isAchieved ? Color.green.opacity(0.06) : Color.clear)
+        .contentShape(Rectangle())
         .onTapGesture { activityToEdit = activity }
         .onLongPressGesture {
             activityToDelete = activity

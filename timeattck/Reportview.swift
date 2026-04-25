@@ -175,7 +175,7 @@ struct ReportView: View {
                                     Text("총 " + timeString(from: activity.totalTime))
                                         .font(.caption).foregroundColor(.blue).fontWeight(.medium)
                                 }.padding(.horizontal)
-                                let records = activity.records.sorted { $0.date > $1.date }.prefix(5)
+                                let records = activity.records.filter { $0.duration >= 60 }.sorted { $0.date > $1.date }.prefix(5)
                                 if records.isEmpty {
                                     Text("기록 없음").foregroundColor(.gray).font(.caption).padding(.horizontal)
                                 } else {

@@ -14,51 +14,88 @@ struct TimerView: View {
         ScrollView {
             VStack(spacing: 10) {
                 ForEach(projects) { project in
-                    let projectActivities = project.sortedActivities
-                    if !projectActivities.isEmpty {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text("\(project.icon) \(project.name)")
-                                .font(.caption)
-                                .foregroundColor(.gray)
-                                .padding(.horizontal)
-                            ForEach(projectActivities) { activity in
-                                Button(action: { selectActivity(activity) }) {
-                                    HStack {
-                                        VStack(alignment: .leading, spacing: 2) {
-                                            Text(activity.name)
-                                                .font(.body)
-                                                .fontWeight(.medium)
-                                                .lineLimit(1)
-                                            if activity.dailyGoal > 0 {
-                                                let todayTime = activity.todayTime
-                                                let progress = min(todayTime / activity.dailyGoal, 1.0)
-                                                HStack(spacing: 4) {
-                                                    ProgressView(value: progress)
-                                                        .frame(width: 60)
-                                                        .tint(progress >= 1.0 ? .green : .blue)
-                                                    Text(String(format: "%.0f%%", progress * 100))
-                                                        .font(.caption2)
-                                                        .foregroundColor(progress >= 1.0 ? .green : .gray)
-                                                }
-                                            }
-                                        }
-                                        Spacer()
-                                        if selectedActivity?.id == activity.id {
-                                            Image(systemName: "stop.circle.fill")
-                                                .foregroundColor(.red)
-                                        }
-                                    }
-                                    .padding()
-                                    .background(selectedActivity?.id == activity.id ? Color.blue.opacity(0.15) : Color.gray.opacity(0.1))
-                                    .cornerRadius(12)
-                                }
-                                .foregroundColor(.primary)
-                            }
-                        }
+                    let activities = project.sortedActivities
+                    if !activities.isEmpty {
+                        timerProjectCard(project: project, activities: activities)
                     }
                 }
             }
             .padding(.horizontal)
+        }
+    }
+
+    func timerProjectCard(project: Project, activities: [Activity]) -> some View {
+        let anySelected = activities.contains { selectedActivity?.id == $0.id }
+        return HStack(alignment: .top, spacing: 0) {
+            projectLabel(project: project)
+
+            Rectangle()
+                .fill(Color.gray.opacity(0.2))
+                .frame(width: 1)
+
+            VStack(spacing: 0) {
+                ForEach(Array(activities.enumerated()), id: \.element.id) { index, activity in
+                    timerActivityRow(activity: activity)
+                    if index < activities.count - 1 {
+                        Divider().padding(.leading, 14)
+                    }
+                }
+            }
+        }
+        .background(anySelected ? Color.blue.opacity(0.12) : Color.gray.opacity(0.08))
+        .cornerRadius(12)
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(anySelected ? Color.blue.opacity(0.3) : Color.gray.opacity(0.15), lineWidth: anySelected ? 1.5 : 1))
+    }
+
+    func projectLabel(project: Project) -> some View {
+        VStack(spacing: 6) {
+            Text(project.icon).font(.title2)
+            Text(project.name)
+                .font(.caption)
+                .foregroundColor(.gray)
+                .multilineTextAlignment(.center)
+                .lineLimit(2)
+        }
+        .frame(width: 72)
+        .frame(maxHeight: .infinity)
+        .padding(.vertical, 14)
+    }
+
+    func timerActivityRow(activity: Activity) -> some View {
+        let isSelected = selectedActivity?.id == activity.id
+        return Button(action: { selectActivity(activity) }) {
+            HStack {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(activity.name)
+                        .font(.body)
+                        .fontWeight(.medium)
+                        .lineLimit(1)
+                    if activity.dailyGoal > 0 {
+                        timerProgressRow(activity: activity)
+                    }
+                }
+                Spacer()
+                if isSelected {
+                    Image(systemName: "stop.circle.fill")
+                        .foregroundColor(.red)
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 11)
+        }
+        .foregroundColor(.primary)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    func timerProgressRow(activity: Activity) -> some View {
+        let todayTime = activity.todayTime
+        let progress = min(todayTime / activity.dailyGoal, 1.0)
+        return HStack(spacing: 4) {
+            ProgressView(value: progress)
+                .tint(progress >= 1.0 ? .green : .blue)
+            Text(String(format: "%.0f%%", progress * 100))
+                .font(.caption2)
+                .foregroundColor(progress >= 1.0 ? .green : .gray)
         }
     }
 
@@ -148,7 +185,7 @@ struct TimerView: View {
     func saveCurrentRecord(for activity: Activity, endDate: Date = Date()) {
         guard let start = startDate else { return }
         let duration = endDate.timeIntervalSince(start)
-        if duration > 0 {
+        if duration >= 10 {
             let record = TimeRecord(activity: activity, duration: duration, date: start)
             modelContext.insert(record)
             checkAndSendGoalNotification(for: activity)
