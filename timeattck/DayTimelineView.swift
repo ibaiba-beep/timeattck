@@ -116,7 +116,6 @@ struct DayTimelineView: View {
                 .onChange(of: selectedDate) { _, newDate in withAnimation { proxy.scrollTo(newDate, anchor: .center) } }
             }
 
-            // 달력 토글 핸들
             Button(action: { withAnimation(.easeInOut(duration: 0.25)) { showCalendar.toggle() } }) {
                 Image(systemName: showCalendar ? "chevron.up" : "chevron.down")
                     .font(.caption2)
@@ -445,16 +444,21 @@ struct AddRecordView: View {
 // MARK: - 기록 수정
 struct EditRecordView: View {
     @Environment(\.dismiss) var dismiss
+    @Query(sort: \Project.sortOrder) var projects: [Project]
     @Query(sort: \TimeRecord.date) var allRecords: [TimeRecord]
     let record: TimeRecord
     @State private var startDateTime: Date
     @State private var endDateTime: Date
+    @State private var selectedProject: Project?
+    @State private var selectedActivity: Activity?
     @State private var showingOverlapAlert = false
 
     init(record: TimeRecord) {
         self.record = record
         _startDateTime = State(initialValue: record.date)
         _endDateTime = State(initialValue: record.date.addingTimeInterval(record.duration))
+        _selectedProject = State(initialValue: record.activity?.project)
+        _selectedActivity = State(initialValue: record.activity)
     }
 
     var duration: TimeInterval { max(endDateTime.timeIntervalSince(startDateTime), 0) }
@@ -469,10 +473,42 @@ struct EditRecordView: View {
     var body: some View {
         NavigationView {
             Form {
+                Section(header: Text("프로젝트")) {
+                    ForEach(projects) { project in
+                        if !project.sortedActivities.isEmpty {
+                            HStack {
+                                Text(project.icon).font(.title3)
+                                Text(project.name)
+                                Spacer()
+                                if selectedProject?.id == project.id {
+                                    Image(systemName: "checkmark").foregroundColor(.blue)
+                                }
+                            }
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                if selectedProject?.id != project.id {
+                                    selectedProject = project
+                                    selectedActivity = nil
+                                }
+                            }
+                        }
+                    }
+                }
                 Section(header: Text("활동")) {
-                    HStack {
-                        Text(record.activity?.project?.icon ?? "📌")
-                        Text(record.activity?.name ?? "알 수 없음")
+                    if let project = selectedProject {
+                        ForEach(project.sortedActivities) { activity in
+                            HStack {
+                                Text(activity.name)
+                                Spacer()
+                                if selectedActivity?.id == activity.id {
+                                    Image(systemName: "checkmark").foregroundColor(.blue)
+                                }
+                            }
+                            .contentShape(Rectangle())
+                            .onTapGesture { selectedActivity = activity }
+                        }
+                    } else {
+                        Text("프로젝트를 먼저 선택해주세요").foregroundColor(.gray).font(.caption)
                     }
                 }
                 Section(header: Text("시작")) {
@@ -497,16 +533,17 @@ struct EditRecordView: View {
             .toolbar {
                 ToolbarItem(placement: .automatic) {
                     Button("저장") {
-                        guard duration > 0 else { return }
+                        guard let activity = selectedActivity, duration > 0 else { return }
                         if hasOverlap(start: startDateTime, end: endDateTime) {
                             showingOverlapAlert = true
                         } else {
+                            record.activity = activity
                             record.date = startDateTime
                             record.duration = duration
                             dismiss()
                         }
                     }
-                    .disabled(duration <= 0)
+                    .disabled(selectedActivity == nil || duration <= 0)
                 }
                 ToolbarItem(placement: .cancellationAction) { Button("취소") { dismiss() } }
             }

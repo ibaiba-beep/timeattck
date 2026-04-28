@@ -63,8 +63,11 @@ protocol SocialDataService {
     /// 현재 로그인된 유저 UID 반환 (없으면 nil)
     var currentUserUID: String? { get }
 
-    /// Apple Sign-In으로 로그인
-    func signInWithApple() async throws -> UserProfile
+    /// Apple Sign-In 요청 전 nonce 준비 — 반환값을 ASAuthorizationPasswordRequest.nonce에 전달
+    func prepareAppleSignIn() -> String
+
+    /// Apple idToken + rawNonce로 Firebase 로그인 후 프로필 반환
+    func signInWithApple(idToken: String, displayName: String?) async throws -> UserProfile
 
     /// 로그아웃
     func signOut() throws

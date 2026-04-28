@@ -9,16 +9,76 @@
 /* Begin PBXBuildFile section */
 		A455C6BD2F9A421800D86EDC /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = A455C6BC2F9A421800D86EDC /* FirebaseAuth */; };
 		A455C6BF2F9A421800D86EDC /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = A455C6BE2F9A421800D86EDC /* FirebaseFirestore */; };
+		A45F9F6B2F9CB44B00E1473F /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A45F9F6A2F9CB44B00E1473F /* WidgetKit.framework */; };
+		A45F9F6D2F9CB44B00E1473F /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A45F9F6C2F9CB44B00E1473F /* SwiftUI.framework */; };
+		A45F9F782F9CB44E00E1473F /* timeattackWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = A45F9F682F9CB44B00E1473F /* timeattackWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		A45F9F762F9CB44E00E1473F /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A455C6222F6F6DE000D86EDC /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A45F9F672F9CB44B00E1473F;
+			remoteInfo = timeattackWidgetExtension;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		A45F9F7D2F9CB44E00E1473F /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				A45F9F782F9CB44E00E1473F /* timeattackWidgetExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		A455C62A2F6F6DE100D86EDC /* timeattck.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = timeattck.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A45F9F682F9CB44B00E1473F /* timeattackWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = timeattackWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		A45F9F6A2F9CB44B00E1473F /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
+		A45F9F6C2F9CB44B00E1473F /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
+		A45F9F802F9CB5CD00E1473F /* timeattackWidgetExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = timeattackWidgetExtension.entitlements; sourceTree = "<group>"; };
 /* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		A45F9F792F9CB44E00E1473F /* Exceptions for "timeattackWidget" folder in "timeattackWidgetExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = A45F9F672F9CB44B00E1473F /* timeattackWidgetExtension */;
+		};
+		A45F9F7F2F9CB56400E1473F /* Exceptions for "timeattck" folder in "timeattackWidgetExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				StartActivityIntent.swift,
+				WidgetDataStore.swift,
+			);
+			target = A45F9F672F9CB44B00E1473F /* timeattackWidgetExtension */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		A455C62C2F6F6DE100D86EDC /* timeattck */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				A45F9F7F2F9CB56400E1473F /* Exceptions for "timeattck" folder in "timeattackWidgetExtension" target */,
+			);
 			path = timeattck;
+			sourceTree = "<group>";
+		};
+		A45F9F6E2F9CB44B00E1473F /* timeattackWidget */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				A45F9F792F9CB44E00E1473F /* Exceptions for "timeattackWidget" folder in "timeattackWidgetExtension" target */,
+			);
+			path = timeattackWidget;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -33,13 +93,25 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A45F9F652F9CB44B00E1473F /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A45F9F6D2F9CB44B00E1473F /* SwiftUI.framework in Frameworks */,
+				A45F9F6B2F9CB44B00E1473F /* WidgetKit.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
 		A455C6212F6F6DE000D86EDC = {
 			isa = PBXGroup;
 			children = (
+				A45F9F802F9CB5CD00E1473F /* timeattackWidgetExtension.entitlements */,
 				A455C62C2F6F6DE100D86EDC /* timeattck */,
+				A45F9F6E2F9CB44B00E1473F /* timeattackWidget */,
+				A45F9F692F9CB44B00E1473F /* Frameworks */,
 				A455C62B2F6F6DE100D86EDC /* Products */,
 			);
 			sourceTree = "<group>";
@@ -48,8 +120,18 @@
 			isa = PBXGroup;
 			children = (
 				A455C62A2F6F6DE100D86EDC /* timeattck.app */,
+				A45F9F682F9CB44B00E1473F /* timeattackWidgetExtension.appex */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		A45F9F692F9CB44B00E1473F /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				A45F9F6A2F9CB44B00E1473F /* WidgetKit.framework */,
+				A45F9F6C2F9CB44B00E1473F /* SwiftUI.framework */,
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -62,10 +144,12 @@
 				A455C6262F6F6DE100D86EDC /* Sources */,
 				A455C6272F6F6DE100D86EDC /* Frameworks */,
 				A455C6282F6F6DE100D86EDC /* Resources */,
+				A45F9F7D2F9CB44E00E1473F /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				A45F9F772F9CB44E00E1473F /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				A455C62C2F6F6DE100D86EDC /* timeattck */,
@@ -79,6 +163,28 @@
 			productReference = A455C62A2F6F6DE100D86EDC /* timeattck.app */;
 			productType = "com.apple.product-type.application";
 		};
+		A45F9F672F9CB44B00E1473F /* timeattackWidgetExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A45F9F7A2F9CB44E00E1473F /* Build configuration list for PBXNativeTarget "timeattackWidgetExtension" */;
+			buildPhases = (
+				A45F9F642F9CB44B00E1473F /* Sources */,
+				A45F9F652F9CB44B00E1473F /* Frameworks */,
+				A45F9F662F9CB44B00E1473F /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				A45F9F6E2F9CB44B00E1473F /* timeattackWidget */,
+			);
+			name = timeattackWidgetExtension;
+			packageProductDependencies = (
+			);
+			productName = timeattackWidgetExtension;
+			productReference = A45F9F682F9CB44B00E1473F /* timeattackWidgetExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -90,6 +196,9 @@
 				LastUpgradeCheck = 2630;
 				TargetAttributes = {
 					A455C6292F6F6DE100D86EDC = {
+						CreatedOnToolsVersion = 26.3;
+					};
+					A45F9F672F9CB44B00E1473F = {
 						CreatedOnToolsVersion = 26.3;
 					};
 				};
@@ -112,12 +221,20 @@
 			projectRoot = "";
 			targets = (
 				A455C6292F6F6DE100D86EDC /* timeattck */,
+				A45F9F672F9CB44B00E1473F /* timeattackWidgetExtension */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		A455C6282F6F6DE100D86EDC /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A45F9F662F9CB44B00E1473F /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -134,7 +251,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A45F9F642F9CB44B00E1473F /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		A45F9F772F9CB44E00E1473F /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A45F9F672F9CB44B00E1473F /* timeattackWidgetExtension */;
+			targetProxy = A45F9F762F9CB44E00E1473F /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		A455C6332F6F6DE300D86EDC /* Debug */ = {
@@ -279,6 +411,7 @@
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = asd.timeattck;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
 				SDKROOT = auto;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx xros xrsimulator";
@@ -320,6 +453,7 @@
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = asd.timeattck;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
 				SDKROOT = auto;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx xros xrsimulator";
@@ -330,6 +464,75 @@
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2,7";
 				XROS_DEPLOYMENT_TARGET = 26.2;
+			};
+			name = Release;
+		};
+		A45F9F7B2F9CB44E00E1473F /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_ENTITLEMENTS = timeattackWidgetExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = J5M8535P23;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = timeattackWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = timeattackWidget;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = asd.timeattck.timeattackWidgetExtension;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		A45F9F7C2F9CB44E00E1473F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_ENTITLEMENTS = timeattackWidgetExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = J5M8535P23;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = timeattackWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = timeattackWidget;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = asd.timeattck.timeattackWidgetExtension;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
 			};
 			name = Release;
 		};
@@ -350,6 +553,15 @@
 			buildConfigurations = (
 				A455C6362F6F6DE300D86EDC /* Debug */,
 				A455C6372F6F6DE300D86EDC /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A45F9F7A2F9CB44E00E1473F /* Build configuration list for PBXNativeTarget "timeattackWidgetExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A45F9F7B2F9CB44E00E1473F /* Debug */,
+				A45F9F7C2F9CB44E00E1473F /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

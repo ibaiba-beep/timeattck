@@ -4,6 +4,7 @@
 // 소셜 기능 메인 뷰 (친구 통계 / 랭킹 / 공유 목표)
 
 import SwiftUI
+import AuthenticationServices
 
 // MARK: - SocialView (탭 진입점)
 
@@ -12,9 +13,68 @@ struct SocialView: View {
     @State private var selectedTab = 0
 
     var body: some View {
+        Group {
+            if vm.isSignedIn {
+                mainView
+            } else {
+                loginView
+            }
+        }
+        .alert("오류", isPresented: .constant(vm.errorMessage != nil)) {
+            Button("확인") { vm.errorMessage = nil }
+        } message: {
+            Text(vm.errorMessage ?? "")
+        }
+    }
+
+    // MARK: - 로그인 화면
+
+    var loginView: some View {
+        NavigationStack {
+            VStack(spacing: 32) {
+                Spacer()
+                VStack(spacing: 16) {
+                    Image(systemName: "person.2.circle.fill")
+                        .font(.system(size: 72))
+                        .foregroundStyle(.blue)
+                    Text("소셜")
+                        .font(.largeTitle).bold()
+                    Text("친구와 함께 시간을 기록해보세요.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+                Spacer()
+                SignInWithAppleButton(.signIn) { request in
+                    request.requestedScopes = [.fullName, .email]
+                    request.nonce = vm.prepareSignIn()
+                } onCompletion: { result in
+                    switch result {
+                    case .success(let auth):
+                        guard let cred = auth.credential as? ASAuthorizationAppleIDCredential,
+                              let tokenData = cred.identityToken,
+                              let token = String(data: tokenData, encoding: .utf8) else { return }
+                        let name = [cred.fullName?.givenName, cred.fullName?.familyName]
+                            .compactMap { $0 }.joined(separator: " ")
+                        Task { await vm.completeAppleSignIn(idToken: token, displayName: name.isEmpty ? nil : name) }
+                    case .failure(let error):
+                        vm.errorMessage = error.localizedDescription
+                    }
+                }
+                .signInWithAppleButtonStyle(.black)
+                .frame(height: 50)
+                .padding(.horizontal, 40)
+                .padding(.bottom, 60)
+            }
+            .navigationTitle("소셜")
+        }
+    }
+
+    // MARK: - 메인 화면
+
+    var mainView: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                // 탭 선택
                 Picker("탭", selection: $selectedTab) {
                     Text("친구").tag(0)
                     Text("랭킹").tag(1)
@@ -23,7 +83,6 @@ struct SocialView: View {
                 .pickerStyle(.segmented)
                 .padding()
 
-                // 탭 내용
                 TabView(selection: $selectedTab) {
                     FriendsStatsView(vm: vm).tag(0)
                     WeeklyRankingView(vm: vm).tag(1)
@@ -50,11 +109,6 @@ struct SocialView: View {
             }
         }
         .task { await vm.loadAll() }
-        .alert("오류", isPresented: .constant(vm.errorMessage != nil)) {
-            Button("확인") { vm.errorMessage = nil }
-        } message: {
-            Text(vm.errorMessage ?? "")
-        }
     }
 }
 

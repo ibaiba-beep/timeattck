@@ -32,17 +32,33 @@ final class SocialViewModel: ObservableObject {
     /// Firebase 사용: SocialViewModel()
     /// CloudKit 전환 시: SocialViewModel(service: CloudKitSocialService())
     init(service: SocialDataService? = nil) {
-        self.service = service ?? FirebaseSocialService()
+        let svc = service ?? FirebaseSocialService()
+        self.service = svc
+        self.isSignedIn = svc.currentUserUID != nil
     }
+
     // MARK: - Auth
 
-    var isSignedIn: Bool {
-        service.currentUserUID != nil
+    @Published var isSignedIn: Bool = false
+
+    func prepareSignIn() -> String {
+        service.prepareAppleSignIn()
+    }
+
+    func completeAppleSignIn(idToken: String, displayName: String?) async {
+        do {
+            myProfile = try await service.signInWithApple(idToken: idToken, displayName: displayName)
+            isSignedIn = true
+            await loadAll()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
 
     func signOut() {
         do {
             try service.signOut()
+            isSignedIn = false
             clearState()
         } catch {
             errorMessage = error.localizedDescription
@@ -52,6 +68,7 @@ final class SocialViewModel: ObservableObject {
     // MARK: - Load
 
     func loadAll() async {
+        guard isSignedIn else { return }
         isLoading = true
         defer { isLoading = false }
 

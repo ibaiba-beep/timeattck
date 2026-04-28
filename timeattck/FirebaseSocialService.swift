@@ -7,6 +7,7 @@
 import Foundation
 import FirebaseAuth
 import FirebaseFirestore
+import CryptoKit
 
 // MARK: - Firebase Keys
 
@@ -24,6 +25,7 @@ final class FirebaseSocialService: SocialDataService {
 
     private let db = Firestore.firestore()
     private let auth = Auth.auth()
+    private var currentRawNonce: String?
 
     // MARK: 인증
 
@@ -31,29 +33,42 @@ final class FirebaseSocialService: SocialDataService {
         auth.currentUser?.uid
     }
 
-    func signInWithApple() async throws -> UserProfile {
-        // Apple Sign-In은 AuthViewModel에서 처리 후 여기서 프로필 생성
-        guard let uid = auth.currentUser?.uid,
-              let displayName = auth.currentUser?.displayName else {
-            throw SocialError.notAuthenticated
+    func prepareAppleSignIn() -> String {
+        let raw = randomNonceString()
+        currentRawNonce = raw
+        return sha256(raw)
+    }
+
+    func signInWithApple(idToken: String, displayName: String?) async throws -> UserProfile {
+        guard let rawNonce = currentRawNonce else { throw SocialError.notAuthenticated }
+        let credential = OAuthProvider.appleCredential(
+            withIDToken: idToken,
+            rawNonce: rawNonce,
+            fullName: nil
+        )
+        let result = try await auth.signIn(with: credential)
+        currentRawNonce = nil
+
+        let uid = result.user.uid
+
+        // 첫 로그인 시 displayName 저장
+        if let name = displayName, !name.isEmpty, result.user.displayName == nil {
+            let req = result.user.createProfileChangeRequest()
+            req.displayName = name
+            try await req.commitChanges()
         }
 
-        // Firestore에 유저 문서가 없으면 생성
+        let finalName = result.user.displayName ?? displayName ?? "사용자"
         let ref = db.collection(Collection.users).document(uid)
-        let snapshot = try await ref.getDocument()
+        let snap = try await ref.getDocument()
 
-        if !snapshot.exists {
-            let profile = UserProfile(
-                id: uid,
-                displayName: displayName,
-                friends: [],
-                weeklyGoals: [:]
-            )
+        if !snap.exists {
+            let profile = UserProfile(id: uid, displayName: finalName, friends: [], weeklyGoals: [:])
             try ref.setData(from: profile)
             return profile
         }
 
-        return try snapshot.data(as: UserProfile.self)
+        return try snap.data(as: UserProfile.self)
     }
 
     func signOut() throws {
@@ -274,6 +289,21 @@ enum SocialError: LocalizedError {
         case .userNotFound: return "해당 사용자를 찾을 수 없습니다."
         case .cannotAddSelf: return "자기 자신은 추가할 수 없습니다."
         }
+    }
+}
+
+// MARK: - Apple Sign-In Helpers
+
+private extension FirebaseSocialService {
+    func randomNonceString(length: Int = 32) -> String {
+        var bytes = [UInt8](repeating: 0, count: length)
+        _ = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
+        let chars: [Character] = Array("0123456789ABCDEFGHIJKLMNOPQRSTUVXYZabcdefghijklmnopqrstuvwxyz-._")
+        return String(bytes.map { chars[Int($0) % chars.count] })
+    }
+
+    func sha256(_ input: String) -> String {
+        SHA256.hash(data: Data(input.utf8)).compactMap { String(format: "%02x", $0) }.joined()
     }
 }
 

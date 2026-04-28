@@ -11,20 +11,10 @@ struct ProjectView: View {
     @State private var activityToEdit: Activity? = nil
     @State private var isReordering = false
 
-    var todaySummary: (achieved: Int, total: Int) {
-        let allActivities = projects.flatMap { $0.activities }
-        let goalActivities = allActivities.filter { $0.dailyGoal > 0 }
-        let achieved = goalActivities.filter { $0.isTodayGoalAchieved }.count
-        return (achieved, goalActivities.count)
-    }
-
     var body: some View {
         NavigationView {
             ScrollView {
                 VStack(spacing: 12) {
-                    if todaySummary.total > 0 {
-                        todaySummaryCard
-                    }
                     ForEach(projects) { project in
                         let projectActivities = project.sortedActivities
                         if !projectActivities.isEmpty {
@@ -83,26 +73,6 @@ struct ProjectView: View {
                 }
             }
         }
-    }
-
-    var todaySummaryCard: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text("오늘의 목표")
-                    .font(.headline)
-                Spacer()
-                Text("\(todaySummary.achieved) / \(todaySummary.total) 달성")
-                    .font(.caption)
-                    .fontWeight(.medium)
-                    .foregroundColor(todaySummary.achieved == todaySummary.total ? .green : .gray)
-            }
-            ProgressView(value: Double(todaySummary.achieved), total: Double(max(todaySummary.total, 1)))
-                .tint(todaySummary.achieved == todaySummary.total ? .green : .blue)
-        }
-        .padding()
-        .background(Color.blue.opacity(0.08))
-        .cornerRadius(16)
-        .padding(.horizontal)
     }
 
     func projectCard(project: Project, activities: [Activity]) -> some View {
