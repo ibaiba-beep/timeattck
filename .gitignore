@@ -14,3 +14,6 @@ DerivedData/
 .DS_Store
 .build/
 build/
+
+# 시뮬레이터 테스트용 백업 데이터
+timeattck_backup_*.json
