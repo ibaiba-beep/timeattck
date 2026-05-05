@@ -16,12 +16,12 @@ struct TimeattckEntry: TimelineEntry {
     static let placeholder = TimeattckEntry(
         date: .now,
         activityName: "영어 공부",
-        projectIcon: "📚",
+        projectIcon: "book",
         timerStartDate: Date().addingTimeInterval(-1200),
         recentActivities: [
-            WidgetActivity(id: "1", name: "영어 공부", icon: "📚"),
-            WidgetActivity(id: "2", name: "어플개발", icon: "💰"),
-            WidgetActivity(id: "3", name: "독서", icon: "📖"),
+            WidgetActivity(id: "1", name: "영어 공부", icon: "book"),
+            WidgetActivity(id: "2", name: "어플개발", icon: "banknote"),
+            WidgetActivity(id: "3", name: "독서", icon: "book.open"),
         ]
     )
 }
@@ -61,9 +61,12 @@ struct SmallWidgetView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             if entry.isRunning, let icon = entry.projectIcon, let name = entry.activityName {
-                Text("\(icon) \(name)")
-                    .font(.subheadline.bold())
-                    .lineLimit(2)
+                HStack(spacing: 4) {
+                    Image(systemName: icon)
+                    Text(name)
+                }
+                .font(.subheadline.bold())
+                .lineLimit(2)
                 Spacer()
                 if let start = entry.timerStartDate {
                     Text(start, style: .timer)
@@ -104,7 +107,11 @@ struct MediumWidgetView: View {
                             } else {
                                 Circle().fill(Color.clear).frame(width: 5, height: 5)
                             }
-                            Text("\(activity.icon) \(activity.name)")
+                            HStack(spacing: 4) {
+                                    Image(systemName: activity.icon)
+                                        .frame(width: 12)
+                                    Text(activity.name)
+                                }
                                 .font(.system(size: 11))
                                 .lineLimit(1)
                                 .foregroundStyle(
@@ -141,9 +148,12 @@ struct MediumWidgetView: View {
                             .font(.caption)
                             .foregroundStyle(.red)
                     }
-                    Text("\(icon) \(name)")
-                        .font(.subheadline.bold())
-                        .lineLimit(1)
+                    HStack(spacing: 4) {
+                        Image(systemName: icon)
+                        Text(name)
+                    }
+                    .font(.subheadline.bold())
+                    .lineLimit(1)
                     Spacer()
                     if let start = entry.timerStartDate {
                         Text(start, style: .timer)

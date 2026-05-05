@@ -2,6 +2,14 @@ import SwiftUI
 import SwiftData
 import Charts
 
+fileprivate struct ActivityLinePoint: Identifiable {
+    let activityName: String
+    let weekday: String
+    let hours: Double
+    let color: Color
+    var id: String { "\(activityName)_\(weekday)" }
+}
+
 struct ReportView: View {
     @Query(sort: \Project.sortOrder) var projects: [Project]
     @Query var allRecords: [TimeRecord]
@@ -14,6 +22,22 @@ struct ReportView: View {
     @State private var weekOffset: Int = 0
     @State private var monthOffset: Int = 0
     @State private var recordSortMode: Int = 0
+    @State private var selectedActivityIDs: Set<UUID> = []
+    @State private var highlightedActivity: String? = nil
+    @State private var showingActivityFilter = false
+
+    var allActivityIDs: Set<UUID> { Set(projects.flatMap { $0.activities }.map { $0.id }) }
+
+    // 전체 선택 또는 빈 상태면 전체 반환
+    var effectiveRecords: [TimeRecord] {
+        if selectedActivityIDs.isEmpty || selectedActivityIDs == allActivityIDs { return allRecords }
+        return allRecords.filter { $0.activity.map { selectedActivityIDs.contains($0.id) } ?? false }
+    }
+
+    // 실제로 일부만 선택된 상태인지
+    var isFiltered: Bool {
+        !selectedActivityIDs.isEmpty && selectedActivityIDs != allActivityIDs
+    }
 
     var body: some View {
         NavigationView {
@@ -36,8 +60,35 @@ struct ReportView: View {
                 .padding(.top)
             }
             .navigationTitle("리포트")
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button { showingActivityFilter = true } label: {
+                        ZStack(alignment: .topTrailing) {
+                            VStack(spacing: 2) {
+                                Image(systemName: isFiltered
+                                      ? "line.3.horizontal.decrease.circle.fill"
+                                      : "line.3.horizontal.decrease.circle")
+                                    .font(.title3)
+                                    .foregroundColor(isFiltered ? .blue : .primary)
+                                Text("활동필터")
+                                    .font(.system(size: 9))
+                                    .foregroundColor(isFiltered ? .blue : .primary)
+                            }
+                            if isFiltered {
+                                Circle()
+                                    .fill(Color.blue)
+                                    .frame(width: 8, height: 8)
+                                    .offset(x: 4, y: -4)
+                            }
+                        }
+                    }
+                }
+            }
             .sheet(isPresented: $showingDayDetail) {
                 if let date = selectedDate { DayDetailView(dateString: date) }
+            }
+            .sheet(isPresented: $showingActivityFilter) {
+                ActivityFilterView(projects: projects, selectedIDs: $selectedActivityIDs)
             }
         }
     }
@@ -118,6 +169,8 @@ struct ReportView: View {
                 .frame(height: 180)
                 .padding(.horizontal)
             }
+
+            activityLineChartSection(offset: weekOffset)
 
             if data.isEmpty { emptyView }
         }
@@ -382,7 +435,7 @@ struct ReportView: View {
     func weeklyProjectData(offset: Int) -> [(String, String, Double, Color)] {
         let range = weekRange(offset: offset)
         let colors: [Color] = [.blue, .purple, .pink, .orange, .green, .teal, .red, .cyan, .mint, .indigo]
-        let weekRecords = allRecords.filter { r in
+        let weekRecords = effectiveRecords.filter { r in
             r.date < range.end && r.date.addingTimeInterval(r.duration) > range.start
         }
         var result: [(String, String, Double, Color)] = []
@@ -424,7 +477,7 @@ struct ReportView: View {
         let dateFmt = DateFormatter(); dateFmt.dateFormat = "M/d"
         let wdFmt = DateFormatter(); wdFmt.locale = Locale(identifier: "ko_KR"); wdFmt.dateFormat = "E"
         let colors: [Color] = [.blue, .purple, .pink, .orange, .green, .teal, .red, .cyan, .mint, .indigo]
-        let weekRecords = allRecords.filter { r in
+        let weekRecords = effectiveRecords.filter { r in
             r.date < range.end && r.date.addingTimeInterval(r.duration) > range.start
         }
         var results: [(String, String, String, Color, Double)] = []
@@ -468,7 +521,7 @@ struct ReportView: View {
 
     func monthProjectData(start: Date, end: Date) -> [(String, String, Double, Color)] {
         let colors: [Color] = [.blue, .purple, .pink, .orange, .green, .teal, .red, .cyan, .mint, .indigo]
-        let periodRecords = allRecords.filter { r in
+        let periodRecords = effectiveRecords.filter { r in
             r.date < end && r.date.addingTimeInterval(r.duration) > start
         }
         var result: [(String, String, Double, Color)] = []
@@ -491,7 +544,7 @@ struct ReportView: View {
         var weekNum = 1
         while weekStart < end {
             let weekEnd = min(calendar.date(byAdding: .day, value: 7, to: weekStart)!, end)
-            let total = allRecords.reduce(0.0) { sum, r in
+            let total = effectiveRecords.reduce(0.0) { sum, r in
                 let recEnd = r.date.addingTimeInterval(r.duration)
                 guard r.date < weekEnd && recEnd > weekStart else { return sum }
                 return sum + min(recEnd, weekEnd).timeIntervalSince(max(r.date, weekStart))
@@ -504,7 +557,7 @@ struct ReportView: View {
     }
 
     func monthTopActivities(start: Date, end: Date) -> [(Activity, Double)] {
-        let periodRecords = allRecords.filter { r in
+        let periodRecords = effectiveRecords.filter { r in
             r.date < end && r.date.addingTimeInterval(r.duration) > start
         }
         var result: [(Activity, Double)] = []
@@ -518,6 +571,144 @@ struct ReportView: View {
             if total > 0 { result.append((activity, total)) }
         }
         return result.sorted { $0.1 > $1.1 }.prefix(5).map { $0 }
+    }
+
+    // MARK: - 활동별 꺾은선 그래프
+
+    fileprivate func weekActivityLinePoints(offset: Int) -> ([ActivityLinePoint], [(String, Color)]) {
+        let range = weekRange(offset: offset)
+        let cal = Calendar.current
+        let wdFmt = DateFormatter()
+        wdFmt.locale = Locale(identifier: "ko_KR"); wdFmt.dateFormat = "E"
+        let palette: [Color] = [.blue, .purple, .pink, .orange, .green, .teal, .red, .cyan, .mint, .indigo]
+
+        var points: [ActivityLinePoint] = []
+        var legendItems: [(String, Color, Double)] = []
+
+        for (projIdx, project) in projects.enumerated() {
+            let color = palette[projIdx % palette.count]
+            for activity in project.sortedActivities {
+                guard selectedActivityIDs.isEmpty || selectedActivityIDs.contains(activity.id) else { continue }
+                var dayPoints: [ActivityLinePoint] = []
+                var weekTotal = 0.0
+                var current = range.start
+                while current < range.end {
+                    let next = cal.date(byAdding: .day, value: 1, to: current)!
+                    let wd = wdFmt.string(from: current)
+                    let h = activity.records.reduce(0.0) { sum, r in
+                        let re = r.date.addingTimeInterval(r.duration)
+                        guard r.date < next && re > current else { return sum }
+                        return sum + min(re, next).timeIntervalSince(max(r.date, current))
+                    } / 3600.0
+                    dayPoints.append(ActivityLinePoint(activityName: activity.name, weekday: wd, hours: h, color: color))
+                    weekTotal += h
+                    current = next
+                }
+                if weekTotal > 0 {
+                    points.append(contentsOf: dayPoints)
+                    legendItems.append((activity.name, color, weekTotal))
+                }
+            }
+        }
+
+        let top8 = legendItems.sorted { $0.2 > $1.2 }.prefix(8)
+        let topNames = Set(top8.map { $0.0 })
+        return (points.filter { topNames.contains($0.activityName) }, top8.map { ($0.0, $0.1) })
+    }
+
+    @ViewBuilder
+    func activityLineChartSection(offset: Int) -> some View {
+        let result = weekActivityLinePoints(offset: offset)
+        let points = result.0
+        let legend = result.1
+        let dayOrder = weekDayOrder(offset: offset)
+
+        if !points.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text("활동별 추이").font(.headline)
+                    Spacer()
+                    if highlightedActivity != nil {
+                        Button("전체 보기") { withAnimation { highlightedActivity = nil } }
+                            .font(.caption).foregroundColor(.blue)
+                    }
+                }
+                .padding(.horizontal)
+
+                Chart {
+                    ForEach(points) { pt in
+                        let dimmed = highlightedActivity != nil && highlightedActivity != pt.activityName
+                        LineMark(
+                            x: .value("요일", pt.weekday),
+                            y: .value("시간", pt.hours),
+                            series: .value("활동", pt.activityName)
+                        )
+                        .foregroundStyle(pt.color.opacity(dimmed ? 0.12 : 1.0))
+                        .interpolationMethod(.catmullRom)
+                        .lineStyle(StrokeStyle(
+                            lineWidth: highlightedActivity == pt.activityName ? 3.5 : 2
+                        ))
+                    }
+                    ForEach(points.filter { $0.hours > 0 }) { pt in
+                        let dimmed = highlightedActivity != nil && highlightedActivity != pt.activityName
+                        PointMark(
+                            x: .value("요일", pt.weekday),
+                            y: .value("시간", pt.hours)
+                        )
+                        .foregroundStyle(pt.color.opacity(dimmed ? 0.12 : 1.0))
+                        .symbolSize(highlightedActivity == pt.activityName ? 55 : 28)
+                    }
+                }
+                .chartXScale(domain: dayOrder.map { $0.1 })
+                .chartYAxis {
+                    AxisMarks(values: .automatic) { v in
+                        AxisGridLine()
+                        AxisValueLabel {
+                            if let h = v.as(Double.self) {
+                                Text(h < 1 && h > 0 ? String(format: "%.0f분", h * 60) : "\(Int(h))시간")
+                                    .font(.system(size: 9))
+                            }
+                        }
+                    }
+                }
+                .chartLegend(.hidden)
+                .frame(height: 200)
+                .padding(.horizontal)
+
+                // 탭 가능한 범례
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 10) {
+                        ForEach(legend.indices, id: \.self) { i in
+                            let name = legend[i].0
+                            let color = legend[i].1
+                            let isSelected = highlightedActivity == name
+                            Button {
+                                withAnimation(.easeInOut(duration: 0.2)) {
+                                    highlightedActivity = isSelected ? nil : name
+                                }
+                            } label: {
+                                HStack(spacing: 5) {
+                                    RoundedRectangle(cornerRadius: 2)
+                                        .fill(color)
+                                        .frame(width: isSelected ? 24 : 16, height: isSelected ? 4 : 3)
+                                    Text(name)
+                                        .font(.caption2)
+                                        .fontWeight(isSelected ? .semibold : .regular)
+                                        .foregroundColor(isSelected ? color : .primary)
+                                }
+                                .padding(.vertical, 5)
+                                .padding(.horizontal, 8)
+                                .background(isSelected ? color.opacity(0.12) : Color.gray.opacity(0.08))
+                                .cornerRadius(8)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(.horizontal)
+                }
+            }
+            .padding(.bottom, 8)
+        }
     }
 
     func topActivities(days: Int) -> [(Activity, Double)] {
@@ -673,6 +864,79 @@ struct DayDetailView: View {
         if days > 0 { return "\(days)일 \(hours)시간 \(minutes)분" }
         if hours > 0 { return "\(hours)시간 \(minutes)분" }
         return "\(minutes)분"
+    }
+}
+
+// MARK: - 활동 필터 시트
+struct ActivityFilterView: View {
+    @Environment(\.dismiss) var dismiss
+    let projects: [Project]
+    @Binding var selectedIDs: Set<UUID>
+
+    var allActivities: [Activity] { projects.flatMap { $0.sortedActivities } }
+    var allIDs: Set<UUID> { Set(allActivities.map { $0.id }) }
+    var isAll: Bool { selectedIDs == allIDs || selectedIDs.isEmpty }
+
+    func isChecked(_ activity: Activity) -> Bool {
+        selectedIDs.isEmpty || selectedIDs.contains(activity.id)
+    }
+
+    func toggle(_ activity: Activity) {
+        if selectedIDs.isEmpty {
+            // 현재 전체 선택 상태 → 해당 항목만 해제
+            selectedIDs = allIDs.subtracting([activity.id])
+        } else if selectedIDs.contains(activity.id) {
+            selectedIDs.remove(activity.id)
+            if selectedIDs.isEmpty { selectedIDs = allIDs } // 마지막 하나 해제 시 전체로 복귀
+        } else {
+            selectedIDs.insert(activity.id)
+            if selectedIDs == allIDs { selectedIDs.removeAll() } // 전부 선택 시 "전체" 상태로
+        }
+    }
+
+    var body: some View {
+        NavigationView {
+            List {
+                Section {
+                    HStack {
+                        Text(isAll ? "전체 활동 선택됨" : "\(selectedIDs.count)개 활동 선택됨")
+                            .font(.subheadline).foregroundColor(.secondary)
+                        Spacer()
+                        Button("전체 선택") {
+                            selectedIDs.removeAll() // empty = 전체
+                        }
+                        .font(.caption).foregroundColor(.blue)
+                        .disabled(isAll)
+                    }
+                }
+                ForEach(projects) { project in
+                    if !project.sortedActivities.isEmpty {
+                        Section(header: HStack(spacing: 6) {
+                            Image(systemName: project.icon).font(.caption)
+                            Text(project.name)
+                        }) {
+                            ForEach(project.sortedActivities) { activity in
+                                HStack {
+                                    Text(activity.name)
+                                    Spacer()
+                                    Image(systemName: isChecked(activity) ? "checkmark.circle.fill" : "circle")
+                                        .foregroundColor(isChecked(activity) ? .blue : .gray.opacity(0.4))
+                                }
+                                .contentShape(Rectangle())
+                                .onTapGesture { toggle(activity) }
+                            }
+                        }
+                    }
+                }
+            }
+            .navigationTitle("활동 필터")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("닫기") { dismiss() }
+                }
+            }
+        }
     }
 }
 
