@@ -1,16 +1,12 @@
 import SwiftUI
 import SwiftData
-
+                                                                                                                                                                                                        
 struct ContentView: View {
     var body: some View {
         TabView {
             TimerView()
                 .tabItem {
                     Label("타이머", systemImage: "timer")
-                }
-            ProjectView()
-                .tabItem {
-                    Label("프로젝트", systemImage: "folder")
                 }
             DayTimelineView()
                 .tabItem {
@@ -33,6 +29,8 @@ struct ContentView: View {
 }
 
 #Preview {
-    ContentView()
-        .modelContainer(sharedModelContainer)
-}
+    let config = ModelConfiguration(isStoredInMemoryOnly: true)
+    let container = try! ModelContainer(for: Schema([Project.self, Activity.self, TimeRecord.self]), configurations: [config])
+    return ContentView()
+        .modelContainer(container)
+}                                           

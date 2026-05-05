@@ -43,8 +43,9 @@ struct ReportView: View {
     }
 
     var weeklyView: some View {
-        let data = weeklyProjectData()
-        let total = data.reduce(0.0) { $0 + $1.1 }
+        let data = weeklyProjectData(offset: weekOffset)
+        let prevData = weeklyProjectData(offset: weekOffset - 1)
+        let total = data.reduce(0.0) { $0 + $1.2 }
         let range = weekRange(offset: weekOffset)
         let weekFreeSeconds = max(7 * 24 * 3600 - total * 3600, 0)
         return VStack(spacing: 20) {
@@ -80,7 +81,7 @@ struct ReportView: View {
                     Text("프로젝트 비중").font(.headline).padding(.horizontal)
                     PieChartView(data: data, total: total, freeTime: weekFreeSeconds)
                         .frame(width: 260, height: 260).frame(maxWidth: .infinity)
-                    legendView(data: data, total: total)
+                    legendView(data: data, total: total, prevData: prevData)
                 }
             }
 
@@ -127,8 +128,10 @@ struct ReportView: View {
         let thisMonth = calendar.date(from: calendar.dateComponents([.year, .month], from: Date()))!
         let mStart = calendar.date(byAdding: .month, value: monthOffset, to: thisMonth)!
         let mEnd = calendar.date(byAdding: .month, value: 1, to: mStart)!
+        let prevMStart = calendar.date(byAdding: .month, value: monthOffset - 1, to: thisMonth)!
         let data = monthProjectData(start: mStart, end: mEnd)
-        let total = data.reduce(0.0) { $0 + $1.1 }
+        let prevData = monthProjectData(start: prevMStart, end: mStart)
+        let total = data.reduce(0.0) { $0 + $1.2 }
         let daysInMonth = Double(calendar.dateComponents([.day], from: mStart, to: mEnd).day ?? 30)
         let freeSeconds = max(daysInMonth * 24 * 3600 - total * 3600, 0)
         let mf = DateFormatter()
@@ -159,7 +162,7 @@ struct ReportView: View {
                     Text("프로젝트 비중").font(.headline).padding(.horizontal)
                     PieChartView(data: data, total: total, freeTime: freeSeconds)
                         .frame(width: 260, height: 260).frame(maxWidth: .infinity)
-                    legendView(data: data, total: total)
+                    legendView(data: data, total: total, prevData: prevData)
                 }
                 VStack(alignment: .leading, spacing: 8) {
                     Text("주별 사용시간").font(.headline).padding(.horizontal)
@@ -177,7 +180,10 @@ struct ReportView: View {
                         HStack(spacing: 12) {
                             Text("\(index + 1)").font(.caption).fontWeight(.bold).foregroundColor(.white)
                                 .frame(width: 24, height: 24).background(medalColor(index)).clipShape(Circle())
-                            Text("\(item.0.project?.icon ?? "📌") \(item.0.name)").font(.body).lineLimit(1)
+                            HStack(spacing: 6) {
+                                Image(systemName: item.0.project?.icon ?? "pin").font(.body)
+                                Text(item.0.name).font(.body).lineLimit(1)
+                            }
                             Spacer()
                             Text(timeString(from: item.1 * 3600)).font(.body).fontWeight(.medium).foregroundColor(.purple)
                         }
@@ -217,7 +223,10 @@ struct ReportView: View {
                 let projectActivities = project.sortedActivities
                 if !projectActivities.isEmpty {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("\(project.icon) \(project.name)").font(.headline).padding(.horizontal)
+                        HStack(spacing: 6) {
+                            Image(systemName: project.icon).font(.headline)
+                            Text(project.name).font(.headline)
+                        }.padding(.horizontal)
                         ForEach(projectActivities) { activity in
                             VStack(alignment: .leading, spacing: 4) {
                                 HStack {
@@ -258,8 +267,10 @@ struct ReportView: View {
             ForEach(sorted) { record in
                 HStack(spacing: 12) {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("\(record.activity?.project?.icon ?? "📌") \(record.activity?.name ?? "-")")
-                            .font(.subheadline).fontWeight(.medium).lineLimit(1)
+                        HStack(spacing: 4) {
+                            Image(systemName: record.activity?.project?.icon ?? "pin").font(.subheadline)
+                            Text(record.activity?.name ?? "-").font(.subheadline).fontWeight(.medium).lineLimit(1)
+                        }
                         Text(dateString(from: record.date)).font(.caption).foregroundColor(.gray)
                     }
                     Spacer()
@@ -285,19 +296,64 @@ struct ReportView: View {
         .padding().background(Color.blue.opacity(0.1)).cornerRadius(16).padding(.horizontal)
     }
 
-    func legendView(data: [(String, Double, Color)], total: Double) -> some View {
+    func legendView(data: [(String, String, Double, Color)], total: Double, prevData: [(String, String, Double, Color)] = []) -> some View {
         VStack(spacing: 8) {
-            ForEach(data, id: \.0) { item in
-                HStack(spacing: 10) {
-                    RoundedRectangle(cornerRadius: 4).fill(item.2).frame(width: 14, height: 14)
-                    Text(item.0).font(.caption)
+            ForEach(data.indices, id: \.self) { i in
+                let item = data[i]
+                let prevHours = prevData.first(where: { $0.1 == item.1 })?.2 ?? 0
+                let delta = item.2 - prevHours
+                let cTag = projectColorTag(item.1)
+                HStack(spacing: 8) {
+                    RoundedRectangle(cornerRadius: 4).fill(item.3).frame(width: 14, height: 14)
+                    Image(systemName: item.0).font(.caption2).foregroundColor(item.3)
+                    Text(item.1).font(.caption)
                     Spacer()
-                    Text(timeString(from: item.1 * 3600)).font(.caption).foregroundColor(.gray)
-                    Text(String(format: "%.0f%%", total > 0 ? item.1 / total * 100 : 0))
+                    if !prevData.isEmpty && abs(delta) >= 1.0 / 60.0 {
+                        deltaBadge(delta: delta, colorTag: cTag)
+                    }
+                    Text(timeString(from: item.2 * 3600)).font(.caption).foregroundColor(.gray)
+                    Text(String(format: "%.0f%%", total > 0 ? item.2 / total * 100 : 0))
                         .font(.caption).fontWeight(.medium).frame(width: 36, alignment: .trailing)
                 }.padding(.horizontal)
             }
         }
+    }
+
+    func deltaBadge(delta: Double, colorTag: String = "green") -> some View {
+        // 빨강(부정): 감소가 좋은 것 / 파랑·초록(긍정·중립): 증가가 좋은 것
+        let isGood = colorTag == "red" ? delta < 0 : delta > 0
+        let isUp = delta > 0
+        let label = shortTimeString(from: abs(delta) * 3600)
+        return HStack(spacing: 2) {
+            Image(systemName: isUp ? "arrow.up" : "arrow.down")
+                .font(.system(size: 8, weight: .bold))
+            Text(label)
+                .font(.system(size: 9, weight: .medium))
+        }
+        .foregroundColor(isGood ? .green : .red)
+        .padding(.horizontal, 5)
+        .padding(.vertical, 2)
+        .background((isGood ? Color.green : Color.red).opacity(0.12))
+        .cornerRadius(4)
+    }
+
+    func projectColorTag(_ projectName: String) -> String {
+        guard let project = projects.first(where: { $0.name == projectName }) else { return "green" }
+        let tags = project.activities.map { $0.colorTag }
+        let redCount  = tags.filter { $0 == "red"  }.count
+        let blueCount = tags.filter { $0 == "blue" }.count
+        if redCount > 0 && blueCount == 0  { return "red"  }
+        if blueCount > 0 && redCount == 0  { return "blue" }
+        return "green"
+    }
+
+    func shortTimeString(from time: TimeInterval) -> String {
+        let totalSeconds = Int(time)
+        let hours = totalSeconds / 3600
+        let minutes = (totalSeconds % 3600) / 60
+        if hours > 0 && minutes > 0 { return "\(hours)시간\(minutes)분" }
+        if hours > 0 { return "\(hours)시간" }
+        return "\(minutes)분"
     }
 
     var emptyView: some View {
@@ -323,20 +379,23 @@ struct ReportView: View {
         return "\(f.string(from: range.start)) ~ \(f.string(from: sunday))"
     }
 
-    func weeklyProjectData() -> [(String, Double, Color)] {
-        let range = weekRange(offset: weekOffset)
+    func weeklyProjectData(offset: Int) -> [(String, String, Double, Color)] {
+        let range = weekRange(offset: offset)
         let colors: [Color] = [.blue, .purple, .pink, .orange, .green, .teal, .red, .cyan, .mint, .indigo]
-        var result: [(String, Double, Color)] = []
-        for (index, project) in projects.enumerated() {
-            var total = 0.0
-            for activity in project.activities {
-                let filtered = activity.records.filter { $0.date >= range.start && $0.date < range.end }
-                total += filtered.reduce(0.0) { $0 + $1.duration }
-            }
-            total /= 3600.0
-            if total > 0 { result.append(("\(project.icon) \(project.name)", total, colors[index % colors.count])) }
+        let weekRecords = allRecords.filter { r in
+            r.date < range.end && r.date.addingTimeInterval(r.duration) > range.start
         }
-        return result.sorted { $0.1 > $1.1 }
+        var result: [(String, String, Double, Color)] = []
+        for (index, project) in projects.enumerated() {
+            let total = weekRecords
+                .filter { $0.activity?.project?.id == project.id }
+                .reduce(0.0) { sum, r in
+                    let recEnd = r.date.addingTimeInterval(r.duration)
+                    return sum + min(recEnd, range.end).timeIntervalSince(max(r.date, range.start))
+                } / 3600.0
+            if total > 0 { result.append((project.icon, project.name, total, colors[index % colors.count])) }
+        }
+        return result.sorted { $0.2 > $1.2 }
     }
 
     func monthDailyTotals() -> [(String, Double)] {
@@ -348,8 +407,11 @@ struct ReportView: View {
         var current = startOfMonth
         while current <= today {
             let next = calendar.date(byAdding: .day, value: 1, to: current)!
-            let filtered = allRecords.filter { $0.date >= current && $0.date < next }
-            let total = filtered.reduce(0.0) { $0 + $1.duration } / 3600.0
+            let total = allRecords.reduce(0.0) { sum, r in
+                let recEnd = r.date.addingTimeInterval(r.duration)
+                guard r.date < next && recEnd > current else { return sum }
+                return sum + min(recEnd, next).timeIntervalSince(max(r.date, current))
+            } / 3600.0
             results.append((f.string(from: current), total))
             current = next
         }
@@ -362,6 +424,9 @@ struct ReportView: View {
         let dateFmt = DateFormatter(); dateFmt.dateFormat = "M/d"
         let wdFmt = DateFormatter(); wdFmt.locale = Locale(identifier: "ko_KR"); wdFmt.dateFormat = "E"
         let colors: [Color] = [.blue, .purple, .pink, .orange, .green, .teal, .red, .cyan, .mint, .indigo]
+        let weekRecords = allRecords.filter { r in
+            r.date < range.end && r.date.addingTimeInterval(r.duration) > range.start
+        }
         var results: [(String, String, String, Color, Double)] = []
         var current = range.start
         while current < range.end {
@@ -369,11 +434,13 @@ struct ReportView: View {
             let dateKey = dateFmt.string(from: current)
             let weekday = wdFmt.string(from: current)
             for (index, project) in projects.enumerated() {
-                var total = 0.0
-                for activity in project.activities {
-                    total += activity.records.filter { $0.date >= current && $0.date < next }.reduce(0.0) { $0 + $1.duration }
-                }
-                total /= 3600.0
+                let total = weekRecords
+                    .filter { $0.activity?.project?.id == project.id }
+                    .reduce(0.0) { sum, r in
+                        let recEnd = r.date.addingTimeInterval(r.duration)
+                        guard r.date < next && recEnd > current else { return sum }
+                        return sum + min(recEnd, next).timeIntervalSince(max(r.date, current))
+                    } / 3600.0
                 if total > 0 {
                     results.append((dateKey, weekday, project.name, colors[index % colors.count], total))
                 }
@@ -399,19 +466,22 @@ struct ReportView: View {
 
     // MARK: - Shared helpers
 
-    func monthProjectData(start: Date, end: Date) -> [(String, Double, Color)] {
+    func monthProjectData(start: Date, end: Date) -> [(String, String, Double, Color)] {
         let colors: [Color] = [.blue, .purple, .pink, .orange, .green, .teal, .red, .cyan, .mint, .indigo]
-        var result: [(String, Double, Color)] = []
-        for (index, project) in projects.enumerated() {
-            var total = 0.0
-            for activity in project.activities {
-                let filtered = activity.records.filter { $0.date >= start && $0.date < end }
-                total += filtered.reduce(0.0) { $0 + $1.duration }
-            }
-            total /= 3600.0
-            if total > 0 { result.append(("\(project.icon) \(project.name)", total, colors[index % colors.count])) }
+        let periodRecords = allRecords.filter { r in
+            r.date < end && r.date.addingTimeInterval(r.duration) > start
         }
-        return result.sorted { $0.1 > $1.1 }
+        var result: [(String, String, Double, Color)] = []
+        for (index, project) in projects.enumerated() {
+            let total = periodRecords
+                .filter { $0.activity?.project?.id == project.id }
+                .reduce(0.0) { sum, r in
+                    let recEnd = r.date.addingTimeInterval(r.duration)
+                    return sum + min(recEnd, end).timeIntervalSince(max(r.date, start))
+                } / 3600.0
+            if total > 0 { result.append((project.icon, project.name, total, colors[index % colors.count])) }
+        }
+        return result.sorted { $0.2 > $1.2 }
     }
 
     func monthWeeklyTotals(start: Date, end: Date) -> [(String, Double)] {
@@ -421,7 +491,11 @@ struct ReportView: View {
         var weekNum = 1
         while weekStart < end {
             let weekEnd = min(calendar.date(byAdding: .day, value: 7, to: weekStart)!, end)
-            let total = allRecords.filter { $0.date >= weekStart && $0.date < weekEnd }.reduce(0.0) { $0 + $1.duration } / 3600.0
+            let total = allRecords.reduce(0.0) { sum, r in
+                let recEnd = r.date.addingTimeInterval(r.duration)
+                guard r.date < weekEnd && recEnd > weekStart else { return sum }
+                return sum + min(recEnd, weekEnd).timeIntervalSince(max(r.date, weekStart))
+            } / 3600.0
             results.append(("\(weekNum)주", total))
             weekStart = weekEnd
             weekNum += 1
@@ -430,10 +504,17 @@ struct ReportView: View {
     }
 
     func monthTopActivities(start: Date, end: Date) -> [(Activity, Double)] {
+        let periodRecords = allRecords.filter { r in
+            r.date < end && r.date.addingTimeInterval(r.duration) > start
+        }
         var result: [(Activity, Double)] = []
         for activity in projects.flatMap({ $0.activities }) {
-            let filtered = activity.records.filter { $0.date >= start && $0.date < end }
-            let total = filtered.reduce(0.0) { $0 + $1.duration } / 3600.0
+            let total = periodRecords
+                .filter { $0.activity?.id == activity.id }
+                .reduce(0.0) { sum, r in
+                    let recEnd = r.date.addingTimeInterval(r.duration)
+                    return sum + min(recEnd, end).timeIntervalSince(max(r.date, start))
+                } / 3600.0
             if total > 0 { result.append((activity, total)) }
         }
         return result.sorted { $0.1 > $1.1 }.prefix(5).map { $0 }
@@ -490,7 +571,7 @@ struct DayDetailView: View {
         return Calendar.current.date(from: components)
     }
 
-    var projectData: [(String, Double, Color)] {
+    var projectData: [(String, String, Double, Color)] {
         guard let date = dayDate else { return [] }
         let start = Calendar.current.startOfDay(for: date)
         let end = Calendar.current.date(byAdding: .day, value: 1, to: start)!
@@ -499,9 +580,9 @@ struct DayDetailView: View {
             let total = project.activities.reduce(0.0) { sum, activity in
                 sum + activity.records.filter { $0.date >= start && $0.date < end }.reduce(0.0) { $0 + $1.duration }
             } / 3600.0
-            if total > 0 { return ("\(project.icon) \(project.name)", total, colors[index % colors.count]) }
+            if total > 0 { return (project.icon, project.name, total, colors[index % colors.count]) }
             return nil
-        }.sorted { $0.1 > $1.1 }
+        }.sorted { $0.2 > $1.2 }
     }
 
     var topActivities: [(Activity, Double)] {
@@ -514,7 +595,7 @@ struct DayDetailView: View {
         }.filter { $0.1 > 0 }.sorted { $0.1 > $1.1 }
     }
 
-    var totalHours: Double { projectData.reduce(0.0) { $0 + $1.1 } }
+    var totalHours: Double { projectData.reduce(0.0) { $0 + $1.2 } }
 
     var body: some View {
         NavigationView {
@@ -537,13 +618,15 @@ struct DayDetailView: View {
                             PieChartView(data: projectData, total: totalHours)
                                 .frame(width: 260, height: 260).frame(maxWidth: .infinity)
                             VStack(spacing: 8) {
-                                ForEach(projectData, id: \.0) { item in
+                                ForEach(projectData.indices, id: \.self) { i in
+                                    let item = projectData[i]
                                     HStack(spacing: 10) {
-                                        RoundedRectangle(cornerRadius: 4).fill(item.2).frame(width: 14, height: 14)
-                                        Text(item.0).font(.caption)
+                                        RoundedRectangle(cornerRadius: 4).fill(item.3).frame(width: 14, height: 14)
+                                        Image(systemName: item.0).font(.caption2).foregroundColor(item.3)
+                                        Text(item.1).font(.caption)
                                         Spacer()
-                                        Text(timeString(from: item.1 * 3600)).font(.caption).foregroundColor(.gray)
-                                        Text(String(format: "%.0f%%", totalHours > 0 ? item.1 / totalHours * 100 : 0))
+                                        Text(timeString(from: item.2 * 3600)).font(.caption).foregroundColor(.gray)
+                                        Text(String(format: "%.0f%%", totalHours > 0 ? item.2 / totalHours * 100 : 0))
                                             .font(.caption).fontWeight(.medium).frame(width: 36, alignment: .trailing)
                                     }.padding(.horizontal)
                                 }
@@ -553,7 +636,10 @@ struct DayDetailView: View {
                             Text("활동별 사용시간").font(.headline).padding(.horizontal)
                             ForEach(topActivities, id: \.0.id) { item in
                                 HStack {
-                                    Text("\(item.0.project?.icon ?? "📌") \(item.0.name)").font(.body).lineLimit(1)
+                                    HStack(spacing: 6) {
+                                        Image(systemName: item.0.project?.icon ?? "pin").font(.body)
+                                        Text(item.0.name).font(.body).lineLimit(1)
+                                    }
                                     Spacer()
                                     GeometryReader { geo in
                                         ZStack(alignment: .leading) {
@@ -591,7 +677,7 @@ struct DayDetailView: View {
 }
 
 struct PieChartView: View {
-    let data: [(String, Double, Color)]
+    let data: [(String, String, Double, Color)]
     let total: Double
     var freeTime: Double? = nil
 
@@ -599,8 +685,8 @@ struct PieChartView: View {
         var result: [(Angle, Angle, Color)] = []
         var currentAngle = Angle(degrees: -90)
         for item in data {
-            let angle = Angle(degrees: total > 0 ? 360 * item.1 / total : 0)
-            result.append((currentAngle, currentAngle + angle, item.2))
+            let angle = Angle(degrees: total > 0 ? 360 * item.2 / total : 0)
+            result.append((currentAngle, currentAngle + angle, item.3))
             currentAngle += angle
         }
         return result
@@ -622,9 +708,9 @@ struct PieChartView: View {
                     let span = (slice.endAngle - slice.startAngle).degrees
                     if span > 22 {
                         let midRad = ((slice.startAngle.degrees + slice.endAngle.degrees) / 2) * Double.pi / 180.0
-                        let icon = data[index].0.components(separatedBy: " ").first ?? ""
-                        Text(icon)
-                            .font(.system(size: 15))
+                        Image(systemName: data[index].0)
+                            .font(.system(size: 13))
+                            .foregroundColor(.white)
                             .position(x: cx + CGFloat(cos(midRad)) * labelR,
                                       y: cy + CGFloat(sin(midRad)) * labelR)
                     }
@@ -669,6 +755,8 @@ struct PieSlice: Shape {
 }
 
 #Preview {
-    ReportView()
-        .modelContainer(sharedModelContainer)
+    let config = ModelConfiguration(isStoredInMemoryOnly: true)
+    let container = try! ModelContainer(for: Schema([Project.self, Activity.self, TimeRecord.self]), configurations: [config])
+    return ReportView()
+        .modelContainer(container)
 }

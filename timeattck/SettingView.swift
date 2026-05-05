@@ -1,6 +1,7 @@
 import SwiftUI
 import SwiftData
 import UniformTypeIdentifiers
+import UIKit
 
 struct SettingsView: View {
     @Environment(\.modelContext) var modelContext
@@ -36,7 +37,7 @@ struct SettingsView: View {
                                 .foregroundColor(.green)
                             Text("백업 복원")
                             Spacer()
-                            Text("JSON 파일 불러오기")
+                            Text("iCloud · 로컬 파일 불러오기")
                                 .font(.caption)
                                 .foregroundColor(.gray)
                         }
@@ -62,6 +63,14 @@ struct SettingsView: View {
                 }
             }
             .navigationTitle("설정")
+            .sheet(isPresented: $showingImporter) {
+                DocumentPickerView { url in
+                    showingImporter = false
+                    alertMessage = "기존 데이터가 모두 덮어씌워져요. 복원할까요?"
+                    pendingRestoreURL = url
+                    showingRestoreAlert = true
+                }
+            }
             .fileExporter(
                 isPresented: $showingExporter,
                 document: backupDocument,
@@ -74,20 +83,6 @@ struct SettingsView: View {
                     showingSuccessAlert = true
                 case .failure(let error):
                     alertMessage = "백업 실패: \(error.localizedDescription)"
-                    showingSuccessAlert = true
-                }
-            }
-            .fileImporter(
-                isPresented: $showingImporter,
-                allowedContentTypes: [.json]
-            ) { result in
-                switch result {
-                case .success(let url):
-                    alertMessage = "기존 데이터가 모두 덮어씌워져요. 복원할까요?"
-                    showingRestoreAlert = true
-                    pendingRestoreURL = url
-                case .failure(let error):
-                    alertMessage = "불러오기 실패: \(error.localizedDescription)"
                     showingSuccessAlert = true
                 }
             }
@@ -125,9 +120,6 @@ struct SettingsView: View {
     }
 
     func restoreBackup(from url: URL) {
-        guard url.startAccessingSecurityScopedResource() else { return }
-        defer { url.stopAccessingSecurityScopedResource() }
-
         guard let data = try? Data(contentsOf: url),
               let backup = try? JSONDecoder().decode(BackupData.self, from: data) else {
             alertMessage = "파일을 읽을 수 없어요. 올바른 백업 파일인지 확인해주세요."
@@ -171,6 +163,34 @@ struct SettingsView: View {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd"
         return "timeattck_backup_\(formatter.string(from: Date()))"
+    }
+}
+
+// MARK: - Document Picker (UIKit)
+
+struct DocumentPickerView: UIViewControllerRepresentable {
+    let onPick: (URL) -> Void
+
+    func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
+        let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.json], asCopy: true)
+        picker.delegate = context.coordinator
+        picker.allowsMultipleSelection = false
+        picker.shouldShowFileExtensions = true
+        return picker
+    }
+
+    func updateUIViewController(_ uiViewController: UIDocumentPickerViewController, context: Context) {}
+
+    func makeCoordinator() -> Coordinator { Coordinator(onPick: onPick) }
+
+    class Coordinator: NSObject, UIDocumentPickerDelegate {
+        let onPick: (URL) -> Void
+        init(onPick: @escaping (URL) -> Void) { self.onPick = onPick }
+
+        func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+            guard let url = urls.first else { return }
+            onPick(url)
+        }
     }
 }
 
@@ -224,6 +244,8 @@ struct BackupDocument: FileDocument {
 }
 
 #Preview {
-    SettingsView()
-        .modelContainer(sharedModelContainer)
+    let config = ModelConfiguration(isStoredInMemoryOnly: true)
+    let container = try! ModelContainer(for: Schema([Project.self, Activity.self, TimeRecord.self]), configurations: [config])
+    return SettingsView()
+        .modelContainer(container)
 }

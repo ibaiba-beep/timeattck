@@ -12,7 +12,9 @@ struct timeattckApp: App {
             ContentView()
                 .onAppear {
                     requestNotificationPermission()
+                    importFromBundleBackup(context: sharedModelContainer.mainContext)
                     migrateFromUserDefaults(context: sharedModelContainer.mainContext)
+                    migrateIconsToSFSymbols(context: sharedModelContainer.mainContext)
                 }
         }
         .modelContainer(sharedModelContainer)

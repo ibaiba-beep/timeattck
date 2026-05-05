@@ -10,6 +10,11 @@ struct TimerView: View {
     @State private var selectedActivity: Activity? = nil
     @State private var startDate: Date? = nil
     @State private var elapsedTime: TimeInterval = 0
+    @State private var showingAddActivity = false
+    @State private var showingAddProject = false
+    @State private var projectToEdit: Project? = nil
+    @State private var activityToEdit: Activity? = nil
+    @State private var preSelectedProjectForActivity: Project? = nil
 
     var projectListView: some View {
         ScrollView {
@@ -50,7 +55,9 @@ struct TimerView: View {
 
     func projectLabel(project: Project) -> some View {
         VStack(spacing: 6) {
-            Text(project.icon).font(.title2)
+            Image(systemName: project.icon)
+                .font(.title2)
+                .frame(width: 32, height: 32)
             Text(project.name)
                 .font(.caption)
                 .foregroundColor(.gray)
@@ -60,19 +67,30 @@ struct TimerView: View {
         .frame(width: 72)
         .frame(maxHeight: .infinity)
         .padding(.vertical, 14)
+        .contentShape(Rectangle())
+        .onLongPressGesture {
+            projectToEdit = project
+        }
     }
 
     func timerActivityRow(activity: Activity) -> some View {
         let isSelected = selectedActivity?.id == activity.id
         return Button(action: { selectActivity(activity) }) {
             HStack {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(activity.name)
-                        .font(.body)
-                        .fontWeight(.medium)
-                        .lineLimit(1)
-                    if activity.dailyGoal > 0 {
-                        timerProgressRow(activity: activity)
+                HStack(spacing: 6) {
+                    if activity.colorTag != "green" {
+                        Circle()
+                            .fill(activity.colorTag == "red" ? Color.red.opacity(0.8) : Color.blue.opacity(0.8))
+                            .frame(width: 7, height: 7)
+                    }
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(activity.name)
+                            .font(.body)
+                            .fontWeight(.medium)
+                            .lineLimit(1)
+                        if activity.todayTime > 0 {
+                            timerProgressRow(activity: activity)
+                        }
                     }
                 }
                 Spacer()
@@ -86,17 +104,20 @@ struct TimerView: View {
         }
         .foregroundColor(.primary)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .simultaneousGesture(
+            LongPressGesture(minimumDuration: 0.5)
+                .onEnded { _ in activityToEdit = activity }
+        )
     }
 
     func timerProgressRow(activity: Activity) -> some View {
-        let todayTime = activity.todayTime
-        let progress = min(todayTime / activity.dailyGoal, 1.0)
+        let ratio = todayRecordedTime > 0 ? activity.todayTime / todayRecordedTime : 0.0
         return HStack(spacing: 4) {
-            ProgressView(value: progress)
-                .tint(progress >= 1.0 ? .green : .blue)
-            Text(String(format: "%.0f%%", progress * 100))
+            ProgressView(value: ratio)
+                .tint(.blue)
+            Text(String(format: "%.0f%%", ratio * 100))
                 .font(.caption2)
-                .foregroundColor(progress >= 1.0 ? .green : .gray)
+                .foregroundColor(.gray)
         }
     }
 
@@ -111,6 +132,26 @@ struct TimerView: View {
             .filter { $0.date >= monthStart && $0.date < nextMonth }
             .reduce(0.0) { $0 + $1.duration }
         return max(totalSeconds - recorded - elapsedTime, 0)
+    }
+
+    var addButton: some View {
+        Menu {
+            Button(action: { showingAddActivity = true }) {
+                Label("활동 추가", systemImage: "bolt.fill")
+            }
+            Button(action: { showingAddProject = true }) {
+                Label("프로젝트 추가", systemImage: "folder.badge.plus")
+            }
+        } label: {
+            Image(systemName: "plus")
+                .font(.title2)
+                .fontWeight(.semibold)
+                .foregroundColor(.white)
+                .frame(width: 56, height: 56)
+                .background(Color.blue)
+                .clipShape(Circle())
+                .shadow(color: .black.opacity(0.25), radius: 6, x: 0, y: 3)
+        }
     }
 
     var body: some View {
@@ -141,10 +182,12 @@ struct TimerView: View {
                         }
                     }
                 if let activity = selectedActivity {
-                    let projectIcon = activity.project?.icon ?? "📌"
-                    Text("\(projectIcon) \(activity.name) 기록중")
-                        .font(.headline)
-                        .foregroundColor(.blue)
+                    HStack(spacing: 6) {
+                        Image(systemName: activity.project?.icon ?? "pin")
+                        Text("\(activity.name) 기록중")
+                    }
+                    .font(.headline)
+                    .foregroundColor(.blue)
                 } else {
                     Text("활동을 선택하면 자동으로 시작돼요")
                         .font(.subheadline)
@@ -157,7 +200,24 @@ struct TimerView: View {
 
             projectListView
         }
+        .overlay(alignment: .bottomTrailing) {
+            addButton
+                .padding(.trailing, 20)
+                .padding(.bottom, 20)
+        }
         .navigationTitle("타이머")
+        .sheet(item: $projectToEdit) { project in
+            EditProjectView(project: project)
+        }
+        .sheet(item: $activityToEdit) { activity in
+            EditActivityView(activity: activity)
+        }
+        .sheet(isPresented: $showingAddActivity, onDismiss: { preSelectedProjectForActivity = nil }) {
+            AddActivityView(isPresented: $showingAddActivity, preSelectedProject: preSelectedProjectForActivity)
+        }
+        .sheet(isPresented: $showingAddProject) {
+            AddProjectView(isPresented: $showingAddProject)
+        }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.willResignActiveNotification)) { _ in
             saveStartDateToStorage()
         }
@@ -167,7 +227,6 @@ struct TimerView: View {
             handlePendingWidgetActivity()
         }
         .onChange(of: projects) { _, _ in
-            // 앱 완전 종료 후 재시작 시 @Query 로드 완료 후 복원
             if selectedActivity == nil {
                 restoreStartDateFromStorage()
             }
@@ -306,6 +365,8 @@ struct TimerView: View {
 }
 
 #Preview {
-    TimerView()
-        .modelContainer(sharedModelContainer)
+    let config = ModelConfiguration(isStoredInMemoryOnly: true)
+    let container = try! ModelContainer(for: Schema([Project.self, Activity.self, TimeRecord.self]), configurations: [config])
+    return TimerView()
+        .modelContainer(container)
 }

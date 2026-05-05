@@ -20,7 +20,7 @@ struct ProjectView: View {
                         if !projectActivities.isEmpty {
                             if isReordering {
                                 VStack(alignment: .leading, spacing: 8) {
-                                    Text("\(project.icon) \(project.name)")
+                                    Label(project.name, systemImage: project.icon)
                                         .font(.headline)
                                         .padding(.horizontal)
                                     ReorderableActivityList(project: project)
@@ -78,7 +78,9 @@ struct ProjectView: View {
     func projectCard(project: Project, activities: [Activity]) -> some View {
         HStack(alignment: .top, spacing: 0) {
             VStack(spacing: 6) {
-                Text(project.icon).font(.title2)
+                Image(systemName: project.icon)
+                    .font(.title2)
+                    .frame(width: 32, height: 32)
                 Text(project.name)
                     .font(.caption)
                     .foregroundColor(.gray)
@@ -220,7 +222,9 @@ struct ProjectManagerView: View {
             List {
                 ForEach(projects) { project in
                     HStack {
-                        Text(project.icon).font(.title2)
+                        Image(systemName: project.icon)
+                            .font(.title3)
+                            .frame(width: 28, height: 28)
                         Text(project.name).font(.body)
                         Spacer()
                         Text("\(project.activities.count)개").font(.caption).foregroundColor(.gray)
@@ -284,9 +288,17 @@ struct AddProjectView: View {
     @Query(sort: \Project.sortOrder) var projects: [Project]
     @Binding var isPresented: Bool
     @State private var name = ""
-    @State private var icon = "📌"
+    @State private var icon = "pin"
 
-    let suggestedIcons = ["🎮","📚","💬","🎬","💪","💼","📌","🎵","🍳","✈️","🎨","📷","🏃","💰","🧘","📝","🎯","🛒","🐾","🌱"]
+    let suggestedIcons = [
+        "gamecontroller", "book", "bubble.left", "film",
+        "figure.strengthtraining.traditional", "briefcase", "banknote", "cart",
+        "leaf", "figure.mind.and.body", "music.note", "fork.knife",
+        "airplane", "paintbrush", "camera", "figure.run",
+        "pin", "pencil", "target", "pawprint",
+        "house", "car.fill", "laptopcomputer", "guitars",
+        "trophy", "heart", "star", "graduationcap", "pills", "phone"
+    ]
 
     var body: some View {
         NavigationView {
@@ -295,14 +307,14 @@ struct AddProjectView: View {
                     TextField("예) 자기계발, 취미, 업무", text: $name)
                 }
                 Section(header: Text("아이콘")) {
-                    TextField("이모지 입력", text: $icon).font(.title2)
-                    LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 5), spacing: 12) {
-                        ForEach(suggestedIcons, id: \.self) { emoji in
-                            Text(emoji).font(.title2)
+                    LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 6), spacing: 12) {
+                        ForEach(suggestedIcons, id: \.self) { symbol in
+                            Image(systemName: symbol)
+                                .font(.title2)
                                 .frame(width: 44, height: 44)
-                                .background(icon == emoji ? Color.blue.opacity(0.2) : Color.gray.opacity(0.1))
+                                .background(icon == symbol ? Color.blue.opacity(0.2) : Color.gray.opacity(0.1))
                                 .cornerRadius(8)
-                                .onTapGesture { icon = emoji }
+                                .onTapGesture { icon = symbol }
                         }
                     }
                     .padding(.vertical, 4)
@@ -335,7 +347,15 @@ struct EditProjectView: View {
     @State private var name: String
     @State private var icon: String
 
-    let suggestedIcons = ["🎮","📚","💬","🎬","💪","💼","📌","🎵","🍳","✈️","🎨","📷","🏃","💰","🧘","📝","🎯","🛒","🐾","🌱"]
+    let suggestedIcons = [
+        "gamecontroller", "book", "bubble.left", "film",
+        "figure.strengthtraining.traditional", "briefcase", "banknote", "cart",
+        "leaf", "figure.mind.and.body", "music.note", "fork.knife",
+        "airplane", "paintbrush", "camera", "figure.run",
+        "pin", "pencil", "target", "pawprint",
+        "house", "car.fill", "laptopcomputer", "guitars",
+        "trophy", "heart", "star", "graduationcap", "pills", "phone"
+    ]
 
     init(project: Project) {
         self.project = project
@@ -350,14 +370,14 @@ struct EditProjectView: View {
                     TextField("이름", text: $name)
                 }
                 Section(header: Text("아이콘")) {
-                    TextField("이모지 입력", text: $icon).font(.title2)
-                    LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 5), spacing: 12) {
-                        ForEach(suggestedIcons, id: \.self) { emoji in
-                            Text(emoji).font(.title2)
+                    LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 6), spacing: 12) {
+                        ForEach(suggestedIcons, id: \.self) { symbol in
+                            Image(systemName: symbol)
+                                .font(.title2)
                                 .frame(width: 44, height: 44)
-                                .background(icon == emoji ? Color.blue.opacity(0.2) : Color.gray.opacity(0.1))
+                                .background(icon == symbol ? Color.blue.opacity(0.2) : Color.gray.opacity(0.1))
                                 .cornerRadius(8)
-                                .onTapGesture { icon = emoji }
+                                .onTapGesture { icon = symbol }
                         }
                     }
                     .padding(.vertical, 4)
@@ -390,7 +410,18 @@ struct AddActivityView: View {
     @State private var name = ""
     @State private var dailyGoalHours: Int = 0
     @State private var dailyGoalMinutes: Int = 0
+    @State private var colorTag: String = "green"
     @State private var step = 1
+
+    init(isPresented: Binding<Bool>, preSelectedProject: Project? = nil) {
+        self._isPresented = isPresented
+        self._selectedProject = State(initialValue: preSelectedProject)
+        self._name = State(initialValue: "")
+        self._dailyGoalHours = State(initialValue: 0)
+        self._dailyGoalMinutes = State(initialValue: 0)
+        self._colorTag = State(initialValue: "green")
+        self._step = State(initialValue: preSelectedProject != nil ? 2 : 1)
+    }
 
     var body: some View {
         NavigationView {
@@ -406,7 +437,9 @@ struct AddActivityView: View {
         List {
             ForEach(projects) { project in
                 HStack {
-                    Text(project.icon).font(.title2)
+                    Image(systemName: project.icon)
+                        .font(.title3)
+                        .frame(width: 28, height: 28)
                     Text(project.name).font(.body)
                     Spacer()
                     Image(systemName: "chevron.right").foregroundColor(.gray).font(.caption)
@@ -430,12 +463,21 @@ struct AddActivityView: View {
         Form {
             Section(header: Text("프로젝트")) {
                 HStack {
-                    Text(selectedProject?.icon ?? "📌")
+                    Image(systemName: selectedProject?.icon ?? "pin")
+                        .foregroundColor(.blue)
                     Text(selectedProject?.name ?? "").foregroundColor(.blue)
                 }
             }
             Section(header: Text("활동 이름")) {
                 TextField("예) 영어 단어, 유튜브, 헬스", text: $name)
+            }
+            Section(header: Text("활동 성격")) {
+                HStack(spacing: 20) {
+                    addActivityColorButton(tag: "red",   label: "부정", color: .red)
+                    addActivityColorButton(tag: "green", label: "중립", color: .gray)
+                    addActivityColorButton(tag: "blue",  label: "긍정", color: .blue)
+                }
+                .padding(.vertical, 4)
             }
             Section(header: Text("하루 목표 시간 (선택)")) {
                 HStack {
@@ -456,7 +498,7 @@ struct AddActivityView: View {
                 Button("추가") {
                     if !name.isEmpty, let project = selectedProject {
                         let goal = TimeInterval(dailyGoalHours * 3600 + dailyGoalMinutes * 60)
-                        let activity = Activity(name: name, project: project, dailyGoal: goal, sortOrder: project.activities.count)
+                        let activity = Activity(name: name, project: project, dailyGoal: goal, sortOrder: project.activities.count, colorTag: colorTag)
                         modelContext.insert(activity)
                         isPresented = false
                     }
@@ -467,6 +509,22 @@ struct AddActivityView: View {
                 Button("뒤로") { step = 1 }
             }
         }
+    }
+
+    func addActivityColorButton(tag: String, label: String, color: Color) -> some View {
+        Button(action: { colorTag = tag }) {
+            VStack(spacing: 6) {
+                Circle()
+                    .fill(tag == "green" ? Color.gray.opacity(0.3) : color.opacity(0.85))
+                    .frame(width: 28, height: 28)
+                    .overlay(
+                        Circle().stroke(colorTag == tag ? color : Color.clear, lineWidth: 2.5)
+                            .padding(-3)
+                    )
+                Text(label).font(.caption2).foregroundColor(colorTag == tag ? color : .gray)
+            }
+        }
+        .buttonStyle(.plain)
     }
 }
 
@@ -480,6 +538,7 @@ struct EditActivityView: View {
     @State private var dailyGoalHours: Int
     @State private var dailyGoalMinutes: Int
     @State private var selectedProject: Project?
+    @State private var colorTag: String
 
     init(activity: Activity) {
         self.activity = activity
@@ -488,6 +547,7 @@ struct EditActivityView: View {
         _dailyGoalHours = State(initialValue: totalSeconds / 3600)
         _dailyGoalMinutes = State(initialValue: (totalSeconds % 3600) / 60)
         _selectedProject = State(initialValue: activity.project)
+        _colorTag = State(initialValue: activity.colorTag)
     }
 
     var body: some View {
@@ -499,7 +559,8 @@ struct EditActivityView: View {
                 Section(header: Text("프로젝트")) {
                     ForEach(projects) { project in
                         HStack {
-                            Text("\(project.icon) \(project.name)")
+                            Image(systemName: project.icon).font(.body)
+                            Text(project.name)
                             Spacer()
                             if selectedProject?.id == project.id {
                                 Image(systemName: "checkmark").foregroundColor(.blue)
@@ -508,6 +569,14 @@ struct EditActivityView: View {
                         .contentShape(Rectangle())
                         .onTapGesture { selectedProject = project }
                     }
+                }
+                Section(header: Text("활동 성격")) {
+                    HStack(spacing: 20) {
+                        activityColorButton(tag: "red",   label: "부정", color: .red)
+                        activityColorButton(tag: "green", label: "중립", color: .gray)
+                        activityColorButton(tag: "blue",  label: "긍정", color: .blue)
+                    }
+                    .padding(.vertical, 4)
                 }
                 Section(header: Text("하루 목표 시간")) {
                     HStack {
@@ -528,6 +597,7 @@ struct EditActivityView: View {
                     Button("저장") {
                         activity.name = name
                         activity.dailyGoal = TimeInterval(dailyGoalHours * 3600 + dailyGoalMinutes * 60)
+                        activity.colorTag = colorTag
                         if let project = selectedProject {
                             activity.project = project
                         }
@@ -540,9 +610,27 @@ struct EditActivityView: View {
             }
         }
     }
+
+    func activityColorButton(tag: String, label: String, color: Color) -> some View {
+        Button(action: { colorTag = tag }) {
+            VStack(spacing: 6) {
+                Circle()
+                    .fill(tag == "green" ? Color.gray.opacity(0.3) : color.opacity(0.85))
+                    .frame(width: 28, height: 28)
+                    .overlay(
+                        Circle().stroke(colorTag == tag ? color : Color.clear, lineWidth: 2.5)
+                            .padding(-3)
+                    )
+                Text(label).font(.caption2).foregroundColor(colorTag == tag ? color : .gray)
+            }
+        }
+        .buttonStyle(.plain)
+    }
 }
 
 #Preview {
-    ProjectView()
-        .modelContainer(sharedModelContainer)
+    let config = ModelConfiguration(isStoredInMemoryOnly: true)
+    let container = try! ModelContainer(for: Schema([Project.self, Activity.self, TimeRecord.self]), configurations: [config])
+    return ProjectView()
+        .modelContainer(container)
 }

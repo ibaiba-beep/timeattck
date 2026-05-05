@@ -26,16 +26,18 @@ import UserNotifications
     var name: String
     var dailyGoal: TimeInterval
     var sortOrder: Int
+    var colorTag: String = "green"  // "red" | "green" | "blue"
     var project: Project?
     @Relationship(deleteRule: .cascade, inverse: \TimeRecord.activity)
     var records: [TimeRecord]
 
-    init(id: UUID = UUID(), name: String, project: Project, dailyGoal: TimeInterval = 0, sortOrder: Int = 0) {
+    init(id: UUID = UUID(), name: String, project: Project, dailyGoal: TimeInterval = 0, sortOrder: Int = 0, colorTag: String = "green") {
         self.id = id
         self.name = name
         self.project = project
         self.dailyGoal = dailyGoal
         self.sortOrder = sortOrder
+        self.colorTag = colorTag
         self.records = []
     }
 }
@@ -142,6 +144,7 @@ private struct LegacyProject: Codable {
     var id: UUID
     var name: String
     var icon: String
+    var sortOrder: Int = 0
 }
 
 private struct LegacyActivity: Codable {
@@ -149,6 +152,8 @@ private struct LegacyActivity: Codable {
     var name: String
     var projectId: UUID
     var dailyGoal: TimeInterval
+    var sortOrder: Int = 0
+    var colorTag: String = "green"
 }
 
 private struct LegacyRecord: Codable {
@@ -189,7 +194,7 @@ func migrateFromUserDefaults(context: ModelContext) {
        let legacyActivities = try? JSONDecoder().decode([LegacyActivity].self, from: data) {
         for (index, la) in legacyActivities.enumerated() {
             guard let project = insertedProjects[la.projectId] else { continue }
-            let a = Activity(id: la.id, name: la.name, project: project, dailyGoal: la.dailyGoal, sortOrder: index)
+            let a = Activity(id: la.id, name: la.name, project: project, dailyGoal: la.dailyGoal, sortOrder: index, colorTag: la.colorTag)
             context.insert(a)
             insertedActivities[la.id] = a
         }
@@ -206,6 +211,103 @@ func migrateFromUserDefaults(context: ModelContext) {
 
     try? context.save()
     ud.set(true, forKey: "migrated_swiftdata")
+}
+
+// MARK: - Emoji → SF Symbol 매핑
+
+let emojiToSFSymbol: [String: String] = [
+    "🎮": "gamecontroller",
+    "📚": "book",
+    "💬": "bubble.left",
+    "🎬": "film",
+    "💪": "figure.strengthtraining.traditional",
+    "💼": "briefcase",
+    "💰": "banknote",
+    "🛒": "cart",
+    "🌱": "leaf",
+    "🧘": "figure.mind.and.body",
+    "🎵": "music.note",
+    "🍳": "fork.knife",
+    "✈️": "airplane",
+    "🎨": "paintbrush",
+    "📷": "camera",
+    "🏃": "figure.run",
+    "📌": "pin",
+    "📝": "pencil",
+    "🎯": "target",
+    "🐾": "pawprint",
+    "🏠": "house",
+    "🚗": "car.fill",
+    "💻": "laptopcomputer",
+    "🎸": "guitars",
+    "🏆": "trophy",
+    "❤️": "heart",
+    "⭐": "star",
+    "📞": "phone",
+    "🎓": "graduationcap",
+    "💊": "pills"
+]
+
+// MARK: - 기존 이모지 → SF Symbol 마이그레이션
+
+@MainActor
+func migrateIconsToSFSymbols(context: ModelContext) {
+    guard !UserDefaults.standard.bool(forKey: "migrated_icons_sf") else { return }
+    let descriptor = FetchDescriptor<Project>()
+    let projects = (try? context.fetch(descriptor)) ?? []
+    for project in projects {
+        if let sf = emojiToSFSymbol[project.icon] {
+            project.icon = sf
+        }
+    }
+    try? context.save()
+    UserDefaults.standard.set(true, forKey: "migrated_icons_sf")
+}
+
+// MARK: - Bundle Backup Import (Simulator)
+
+@MainActor
+func importFromBundleBackup(context: ModelContext) {
+    #if targetEnvironment(simulator)
+    let descriptor = FetchDescriptor<Project>()
+    guard (try? context.fetch(descriptor))?.isEmpty == true else { return }
+
+    guard let url = Bundle.main.url(forResource: "timeattck_backup_2026-05-01", withExtension: "json"),
+          let data = try? Data(contentsOf: url) else { return }
+
+    struct BackupFile: Codable {
+        var projects: [LegacyProject]
+        var activities: [LegacyActivity]
+        var records: [LegacyRecord]
+    }
+
+    guard let backup = try? JSONDecoder().decode(BackupFile.self, from: data) else { return }
+
+    var projectMap: [UUID: Project] = [:]
+    for lp in backup.projects {
+        let sfIcon = emojiToSFSymbol[lp.icon] ?? "folder"
+        let p = Project(id: lp.id, name: lp.name, icon: sfIcon, sortOrder: lp.sortOrder)
+        context.insert(p)
+        projectMap[lp.id] = p
+    }
+
+    var activityMap: [UUID: Activity] = [:]
+    for la in backup.activities {
+        guard let project = projectMap[la.projectId] else { continue }
+        let a = Activity(id: la.id, name: la.name, project: project, dailyGoal: la.dailyGoal, sortOrder: la.sortOrder, colorTag: la.colorTag)
+        context.insert(a)
+        activityMap[la.id] = a
+    }
+
+    for lr in backup.records {
+        guard let activity = activityMap[lr.activityId] else { continue }
+        let r = TimeRecord(id: lr.id, activity: activity, duration: lr.duration, date: lr.date)
+        context.insert(r)
+    }
+
+    try? context.save()
+    UserDefaults.standard.set(true, forKey: "migrated_swiftdata")
+    #endif
 }
 
 // MARK: - Notification Helpers

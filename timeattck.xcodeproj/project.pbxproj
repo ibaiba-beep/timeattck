@@ -12,6 +12,8 @@
 		A45F9F6B2F9CB44B00E1473F /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A45F9F6A2F9CB44B00E1473F /* WidgetKit.framework */; };
 		A45F9F6D2F9CB44B00E1473F /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A45F9F6C2F9CB44B00E1473F /* SwiftUI.framework */; };
 		A45F9F782F9CB44E00E1473F /* timeattackWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = A45F9F682F9CB44B00E1473F /* timeattackWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		A4B5FB402FA46AB400C39355 /* timeattck_backup_2026-05-01.json in Resources */ = {isa = PBXBuildFile; fileRef = A4B5FB3F2FA46AB400C39355 /* timeattck_backup_2026-05-01.json */; };
+		A4B5FB412FA46AB400C39355 /* timeattck_backup_2026-05-01.json in Resources */ = {isa = PBXBuildFile; fileRef = A4B5FB3F2FA46AB400C39355 /* timeattck_backup_2026-05-01.json */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -44,6 +46,7 @@
 		A45F9F6A2F9CB44B00E1473F /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
 		A45F9F6C2F9CB44B00E1473F /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 		A45F9F802F9CB5CD00E1473F /* timeattackWidgetExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = timeattackWidgetExtension.entitlements; sourceTree = "<group>"; };
+		A4B5FB3F2FA46AB400C39355 /* timeattck_backup_2026-05-01.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "timeattck_backup_2026-05-01.json"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -113,6 +116,7 @@
 				A45F9F6E2F9CB44B00E1473F /* timeattackWidget */,
 				A45F9F692F9CB44B00E1473F /* Frameworks */,
 				A455C62B2F6F6DE100D86EDC /* Products */,
+				A4B5FB3F2FA46AB400C39355 /* timeattck_backup_2026-05-01.json */,
 			);
 			sourceTree = "<group>";
 		};
@@ -231,6 +235,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A4B5FB412FA46AB400C39355 /* timeattck_backup_2026-05-01.json in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -238,6 +243,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A4B5FB402FA46AB400C39355 /* timeattck_backup_2026-05-01.json in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -388,6 +394,8 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ALLOW_ENTITLEMENTS_MODIFICATION = YES;
+				"CODE_SIGN_ALLOW_ENTITLEMENTS_MODIFICATION[arch=*]" = "";
 				CODE_SIGN_ENTITLEMENTS = timeattck/timeattck.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
@@ -430,6 +438,8 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ALLOW_ENTITLEMENTS_MODIFICATION = YES;
+				"CODE_SIGN_ALLOW_ENTITLEMENTS_MODIFICATION[arch=*]" = "";
 				CODE_SIGN_ENTITLEMENTS = timeattck/timeattck.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
@@ -472,6 +482,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_ALLOW_ENTITLEMENTS_MODIFICATION = yes;
 				CODE_SIGN_ENTITLEMENTS = timeattackWidgetExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
@@ -506,6 +517,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_ALLOW_ENTITLEMENTS_MODIFICATION = yes;
 				CODE_SIGN_ENTITLEMENTS = timeattackWidgetExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
