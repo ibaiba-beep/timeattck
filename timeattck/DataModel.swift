@@ -310,6 +310,115 @@ func importFromBundleBackup(context: ModelContext) {
     #endif
 }
 
+// MARK: - 시뮬레이터 샘플 데이터
+
+@MainActor
+func insertSampleDataIfNeeded(context: ModelContext) {
+    #if targetEnvironment(simulator)
+    let descriptor = FetchDescriptor<Project>()
+    guard (try? context.fetch(descriptor))?.isEmpty == true else { return }
+
+    let cal = Calendar.current
+    let today = cal.startOfDay(for: Date())
+
+    let p1 = Project(name: "공부", icon: "book", sortOrder: 0)
+    let p2 = Project(name: "건강/운동", icon: "figure.run", sortOrder: 1)
+    let p3 = Project(name: "업무", icon: "briefcase", sortOrder: 2)
+    let p4 = Project(name: "엔터테인먼트", icon: "film", sortOrder: 3)
+    let p5 = Project(name: "기타", icon: "pin", sortOrder: 4)
+    [p1, p2, p3, p4, p5].forEach { context.insert($0) }
+
+    let a11 = Activity(name: "독서", project: p1, dailyGoal: 3600, sortOrder: 0, colorTag: "green")
+    let a12 = Activity(name: "코딩 공부", project: p1, dailyGoal: 7200, sortOrder: 1, colorTag: "blue")
+    let a13 = Activity(name: "강의 수강", project: p1, dailyGoal: 3600, sortOrder: 2, colorTag: "green")
+    let a21 = Activity(name: "헬스", project: p2, dailyGoal: 3600, sortOrder: 0, colorTag: "blue")
+    let a22 = Activity(name: "러닝", project: p2, dailyGoal: 1800, sortOrder: 1, colorTag: "green")
+    let a23 = Activity(name: "명상", project: p2, dailyGoal: 600, sortOrder: 2, colorTag: "green")
+    let a31 = Activity(name: "개발", project: p3, dailyGoal: 14400, sortOrder: 0, colorTag: "blue")
+    let a32 = Activity(name: "회의", project: p3, dailyGoal: 0, sortOrder: 1, colorTag: "red")
+    let a33 = Activity(name: "기획/문서", project: p3, dailyGoal: 3600, sortOrder: 2, colorTag: "green")
+    let a41 = Activity(name: "유튜브", project: p4, dailyGoal: 0, sortOrder: 0, colorTag: "red")
+    let a42 = Activity(name: "넷플릭스", project: p4, dailyGoal: 0, sortOrder: 1, colorTag: "red")
+    let a51 = Activity(name: "먹고 쉬기", project: p5, dailyGoal: 0, sortOrder: 0, colorTag: "green")
+    [a11, a12, a13, a21, a22, a23, a31, a32, a33, a41, a42, a51].forEach { context.insert($0) }
+
+    func rec(_ activity: Activity, daysAgo: Int, h: Int, m: Int = 0, mins: Int) {
+        guard let day = cal.date(byAdding: .day, value: -daysAgo, to: today),
+              let start = cal.date(bySettingHour: h, minute: m, second: 0, of: day) else { return }
+        context.insert(TimeRecord(activity: activity, duration: TimeInterval(mins * 60), date: start))
+    }
+
+    // 오늘
+    rec(a51, daysAgo: 0, h: 8, mins: 30)
+    rec(a12, daysAgo: 0, h: 9, mins: 90)
+    rec(a32, daysAgo: 0, h: 11, mins: 60)
+    rec(a31, daysAgo: 0, h: 13, mins: 120)
+    rec(a11, daysAgo: 0, h: 15, m: 30, mins: 60)
+    rec(a21, daysAgo: 0, h: 19, mins: 60)
+    rec(a41, daysAgo: 0, h: 21, mins: 60)
+
+    // 어제
+    rec(a51, daysAgo: 1, h: 8, mins: 30)
+    rec(a31, daysAgo: 1, h: 9, mins: 150)
+    rec(a32, daysAgo: 1, h: 14, mins: 90)
+    rec(a33, daysAgo: 1, h: 16, mins: 60)
+    rec(a22, daysAgo: 1, h: 18, m: 30, mins: 30)
+    rec(a42, daysAgo: 1, h: 21, mins: 120)
+
+    // 2일 전
+    rec(a51, daysAgo: 2, h: 8, mins: 40)
+    rec(a12, daysAgo: 2, h: 9, mins: 120)
+    rec(a13, daysAgo: 2, h: 11, m: 30, mins: 60)
+    rec(a31, daysAgo: 2, h: 14, mins: 90)
+    rec(a21, daysAgo: 2, h: 19, mins: 60)
+    rec(a23, daysAgo: 2, h: 22, mins: 20)
+
+    // 3일 전
+    rec(a51, daysAgo: 3, h: 8, m: 30, mins: 30)
+    rec(a31, daysAgo: 3, h: 10, mins: 180)
+    rec(a32, daysAgo: 3, h: 15, mins: 60)
+    rec(a11, daysAgo: 3, h: 17, mins: 90)
+    rec(a22, daysAgo: 3, h: 19, mins: 40)
+    rec(a41, daysAgo: 3, h: 21, m: 30, mins: 60)
+
+    // 4일 전
+    rec(a51, daysAgo: 4, h: 8, mins: 30)
+    rec(a12, daysAgo: 4, h: 9, m: 30, mins: 90)
+    rec(a33, daysAgo: 4, h: 11, m: 30, mins: 90)
+    rec(a32, daysAgo: 4, h: 14, mins: 60)
+    rec(a31, daysAgo: 4, h: 15, m: 30, mins: 120)
+    rec(a21, daysAgo: 4, h: 18, m: 30, mins: 60)
+
+    // 5일 전
+    rec(a51, daysAgo: 5, h: 8, mins: 30)
+    rec(a11, daysAgo: 5, h: 9, mins: 60)
+    rec(a13, daysAgo: 5, h: 10, m: 30, mins: 90)
+    rec(a12, daysAgo: 5, h: 14, mins: 120)
+    rec(a22, daysAgo: 5, h: 18, mins: 35)
+    rec(a42, daysAgo: 5, h: 20, mins: 90)
+
+    // 6일 전
+    rec(a51, daysAgo: 6, h: 8, mins: 45)
+    rec(a31, daysAgo: 6, h: 10, mins: 120)
+    rec(a32, daysAgo: 6, h: 13, mins: 90)
+    rec(a33, daysAgo: 6, h: 15, mins: 60)
+    rec(a21, daysAgo: 6, h: 19, mins: 60)
+    rec(a41, daysAgo: 6, h: 21, mins: 45)
+
+    // 7~14일 전
+    rec(a12, daysAgo: 7, h: 10, m: 30, mins: 90); rec(a11, daysAgo: 7, h: 14, mins: 60); rec(a22, daysAgo: 7, h: 17, mins: 40); rec(a42, daysAgo: 7, h: 21, mins: 90)
+    rec(a31, daysAgo: 8, h: 9, mins: 180); rec(a32, daysAgo: 8, h: 13, mins: 60); rec(a21, daysAgo: 8, h: 18, mins: 60)
+    rec(a12, daysAgo: 9, h: 10, mins: 120); rec(a13, daysAgo: 9, h: 13, mins: 90); rec(a41, daysAgo: 9, h: 20, mins: 60)
+    rec(a31, daysAgo: 10, h: 9, mins: 240); rec(a33, daysAgo: 10, h: 14, mins: 60); rec(a22, daysAgo: 10, h: 18, mins: 40)
+    rec(a11, daysAgo: 11, h: 9, mins: 90); rec(a12, daysAgo: 11, h: 11, mins: 90); rec(a21, daysAgo: 11, h: 18, m: 30, mins: 60); rec(a42, daysAgo: 11, h: 21, mins: 90)
+    rec(a31, daysAgo: 12, h: 9, mins: 150); rec(a32, daysAgo: 12, h: 14, mins: 90); rec(a21, daysAgo: 12, h: 19, mins: 45)
+    rec(a12, daysAgo: 13, h: 10, m: 30, mins: 120); rec(a13, daysAgo: 13, h: 14, mins: 90); rec(a22, daysAgo: 13, h: 18, mins: 35)
+    rec(a11, daysAgo: 14, h: 9, mins: 60); rec(a31, daysAgo: 14, h: 10, m: 30, mins: 120); rec(a21, daysAgo: 14, h: 18, mins: 60)
+
+    try? context.save()
+    #endif
+}
+
 // MARK: - Notification Helpers
 
 func requestNotificationPermission() {
