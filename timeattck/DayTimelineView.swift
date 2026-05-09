@@ -675,6 +675,7 @@ struct EditRecordView: View {
     @State private var selectedProject: Project?
     @State private var selectedActivity: Activity?
     @State private var showingOverlapAlert = false
+    @State private var conflictingRecord: TimeRecord? = nil
 
     init(record: TimeRecord) {
         self.record = record
@@ -686,9 +687,20 @@ struct EditRecordView: View {
 
     var duration: TimeInterval { max(endDateTime.timeIntervalSince(startDateTime), 0) }
 
-    func hasOverlap(start: Date, end: Date) -> Bool {
-        allRecords.filter { $0.id != record.id }.contains {
-            let recEnd = $0.date.addingTimeInterval($0.duration); return start < recEnd && end > $0.date
+    var overlapAlertMessage: String {
+        guard let c = conflictingRecord else { return "해당 시간대에 이미 기록이 있어요." }
+        let f = DateFormatter()
+        f.dateFormat = "M/d HH:mm"
+        let s = f.string(from: c.date)
+        let e = f.string(from: c.date.addingTimeInterval(c.duration))
+        let name = c.activity?.name ?? "알 수 없음"
+        return "'\(name)' (\(s)~\(e))와 겹쳐요.\n타임라인에서 해당 기록을 확인해주세요."
+    }
+
+    func findConflict(start: Date, end: Date) -> TimeRecord? {
+        allRecords.filter { $0.id != record.id }.first {
+            let recEnd = $0.date.addingTimeInterval($0.duration)
+            return start < recEnd && end > $0.date
         }
     }
 
@@ -734,16 +746,20 @@ struct EditRecordView: View {
                 ToolbarItem(placement: .automatic) {
                     Button("저장") {
                         guard let activity = selectedActivity, duration > 0 else { return }
-                        if hasOverlap(start: startDateTime, end: endDateTime) { showingOverlapAlert = true }
-                        else { record.activity = activity; record.date = startDateTime; record.duration = duration; dismiss() }
+                        if let conflict = findConflict(start: startDateTime, end: endDateTime) {
+                            conflictingRecord = conflict
+                            showingOverlapAlert = true
+                        } else {
+                            record.activity = activity; record.date = startDateTime; record.duration = duration; dismiss()
+                        }
                     }
                     .disabled(selectedActivity == nil || duration <= 0)
                 }
                 ToolbarItem(placement: .cancellationAction) { Button("취소") { dismiss() } }
             }
             .alert("시간 겹침", isPresented: $showingOverlapAlert) {
-                Button("확인", role: .cancel) {}
-            } message: { Text("해당 시간대에 이미 기록이 있어요.\n다른 시간을 선택해주세요.") }
+                Button("확인", role: .cancel) { conflictingRecord = nil }
+            } message: { Text(overlapAlertMessage) }
         }
     }
 

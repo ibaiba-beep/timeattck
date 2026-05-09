@@ -526,12 +526,14 @@ struct ReportView: View {
         }
         var result: [(String, String, Double, Color)] = []
         for (index, project) in projects.enumerated() {
-            let total = periodRecords
-                .filter { $0.activity?.project?.id == project.id }
-                .reduce(0.0) { sum, r in
-                    let recEnd = r.date.addingTimeInterval(r.duration)
-                    return sum + min(recEnd, end).timeIntervalSince(max(r.date, start))
-                } / 3600.0
+            let filtered = periodRecords.filter { $0.activity?.project?.id == project.id }
+            let seconds: Double = filtered.reduce(0.0) { (sum: Double, r: TimeRecord) -> Double in
+                let recEnd = r.date.addingTimeInterval(r.duration)
+                let clampedEnd = min(recEnd, end)
+                let clampedStart = max(r.date, start)
+                return sum + clampedEnd.timeIntervalSince(clampedStart)
+            }
+            let total = seconds / 3600.0
             if total > 0 { result.append((project.icon, project.name, total, colors[index % colors.count])) }
         }
         return result.sorted { $0.2 > $1.2 }
@@ -544,11 +546,14 @@ struct ReportView: View {
         var weekNum = 1
         while weekStart < end {
             let weekEnd = min(calendar.date(byAdding: .day, value: 7, to: weekStart)!, end)
-            let total = effectiveRecords.reduce(0.0) { sum, r in
+            let seconds: Double = effectiveRecords.reduce(0.0) { (sum: Double, r: TimeRecord) -> Double in
                 let recEnd = r.date.addingTimeInterval(r.duration)
                 guard r.date < weekEnd && recEnd > weekStart else { return sum }
-                return sum + min(recEnd, weekEnd).timeIntervalSince(max(r.date, weekStart))
-            } / 3600.0
+                let clampedEnd = min(recEnd, weekEnd)
+                let clampedStart = max(r.date, weekStart)
+                return sum + clampedEnd.timeIntervalSince(clampedStart)
+            }
+            let total = seconds / 3600.0
             results.append(("\(weekNum)주", total))
             weekStart = weekEnd
             weekNum += 1
@@ -562,12 +567,14 @@ struct ReportView: View {
         }
         var result: [(Activity, Double)] = []
         for activity in projects.flatMap({ $0.activities }) {
-            let total = periodRecords
-                .filter { $0.activity?.id == activity.id }
-                .reduce(0.0) { sum, r in
-                    let recEnd = r.date.addingTimeInterval(r.duration)
-                    return sum + min(recEnd, end).timeIntervalSince(max(r.date, start))
-                } / 3600.0
+            let filtered2 = periodRecords.filter { $0.activity?.id == activity.id }
+            let seconds2: Double = filtered2.reduce(0.0) { (sum: Double, r: TimeRecord) -> Double in
+                let recEnd = r.date.addingTimeInterval(r.duration)
+                let clampedEnd = min(recEnd, end)
+                let clampedStart = max(r.date, start)
+                return sum + clampedEnd.timeIntervalSince(clampedStart)
+            }
+            let total = seconds2 / 3600.0
             if total > 0 { result.append((activity, total)) }
         }
         return result.sorted { $0.1 > $1.1 }.prefix(5).map { $0 }
