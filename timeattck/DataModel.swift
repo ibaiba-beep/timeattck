@@ -5,12 +5,12 @@ import UserNotifications
 // MARK: - Models
 
 @Model final class Project {
-    var id: UUID
-    var name: String
-    var icon: String
-    var sortOrder: Int
+    var id: UUID = UUID()
+    var name: String = ""
+    var icon: String = "pin"
+    var sortOrder: Int = 0
     @Relationship(deleteRule: .cascade, inverse: \Activity.project)
-    var activities: [Activity]
+    var activities: [Activity] = []
 
     init(id: UUID = UUID(), name: String, icon: String, sortOrder: Int = 0) {
         self.id = id
@@ -22,14 +22,14 @@ import UserNotifications
 }
 
 @Model final class Activity {
-    var id: UUID
-    var name: String
-    var dailyGoal: TimeInterval
-    var sortOrder: Int
-    var colorTag: String = "green"  // "red" | "green" | "blue"
+    var id: UUID = UUID()
+    var name: String = ""
+    var dailyGoal: TimeInterval = 0
+    var sortOrder: Int = 0
+    var colorTag: String = "green"
     var project: Project?
     @Relationship(deleteRule: .cascade, inverse: \TimeRecord.activity)
-    var records: [TimeRecord]
+    var records: [TimeRecord] = []
 
     init(id: UUID = UUID(), name: String, project: Project, dailyGoal: TimeInterval = 0, sortOrder: Int = 0, colorTag: String = "green") {
         self.id = id
@@ -43,9 +43,9 @@ import UserNotifications
 }
 
 @Model final class TimeRecord {
-    var id: UUID
-    var duration: TimeInterval
-    var date: Date
+    var id: UUID = UUID()
+    var duration: TimeInterval = 0
+    var date: Date = Date()
     var activity: Activity?
 
     init(id: UUID = UUID(), activity: Activity, duration: TimeInterval, date: Date = Date()) {
@@ -130,11 +130,25 @@ extension Activity {
 
 let sharedModelContainer: ModelContainer = {
     let schema = Schema([Project.self, Activity.self, TimeRecord.self])
+    #if targetEnvironment(simulator)
     let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
+    #else
+    let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false, cloudKitDatabase: .automatic)
+    #endif
     do {
         return try ModelContainer(for: schema, configurations: [config])
     } catch {
-        fatalError("ModelContainer 생성 실패: \(error)")
+        print("SwiftData 오류 (CloudKit): \(error)")
+        // CloudKit 실패 시 로컬 저장소로 fallback
+        let fallbackConfig = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
+        do {
+            return try ModelContainer(for: schema, configurations: [fallbackConfig])
+        } catch {
+            print("SwiftData 로컬 저장소도 실패: \(error)")
+            // 최후 수단: 인메모리 (데이터 유실되지만 앱은 살아있음)
+            let memoryConfig = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+            return try! ModelContainer(for: schema, configurations: [memoryConfig])
+        }
     }
 }()
 

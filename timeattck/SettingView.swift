@@ -134,7 +134,8 @@ struct SettingsView: View {
 
         var newProjects: [UUID: Project] = [:]
         for bp in backup.projects {
-            let p = Project(id: bp.id, name: bp.name, icon: bp.icon, sortOrder: bp.sortOrder)
+            let icon = emojiToSFSymbol[bp.icon] ?? bp.icon
+            let p = Project(id: bp.id, name: bp.name, icon: icon, sortOrder: bp.sortOrder)
             modelContext.insert(p)
             newProjects[bp.id] = p
         }
